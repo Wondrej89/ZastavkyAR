@@ -7,5 +7,5 @@ export function formatDatasetDate(meta, locale = 'cs-CZ') {
 }
 
 export function datasetReadyMessage(meta, locale = 'cs-CZ') {
-  return `Zastávky jsou správně stažené. Poslední verze dat: ${formatDatasetDate(meta, locale)}.`;
+  return `Data zastávek: ${formatDatasetDate(meta, locale)}\nPočet zastávek: ${meta?.markerCount ?? 0}`;
 }
