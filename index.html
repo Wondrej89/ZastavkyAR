@@ -4,7 +4,7 @@
 <main id="mobile" class="app hidden">
  <video id="camera" playsinline muted aria-label="Obraz zadní kamery"></video><div id="shade"></div>
  <section id="init" class="card center"><h1>Připravujeme PID AR</h1><p id="init-status">Stahuji data zastávek…</p><progress id="progress" max="1"></progress><p>Data budou uložena v telefonu,<br>aby vyhledávání zastávek fungovalo rychle.</p></section>
- <section id="welcome" class="card center hidden"><h1>Zastávky přímo před vámi</h1><p>AR používá kameru, polohu a kompas pouze ve vašem zařízení.</p><button id="start">Spustit AR</button><button id="install" class="secondary hidden">Nainstalovat aplikaci</button></section>
+ <section id="welcome" class="card center hidden"><h1>Zastávky přímo před vámi</h1><p id="dataset-status" class="dataset-status" role="status"></p><p>AR používá kameru, polohu a kompas pouze ve vašem zařízení.</p><button id="start">Spustit AR</button><button id="install" class="secondary hidden">Nainstalovat aplikaci</button></section>
  <div id="hud" class="hidden"><div id="status" role="status">Čekám na polohu…</div><div id="markers"></div><div class="reticle" aria-hidden="true"></div><div id="edge-left" class="edge left hidden">‹</div><div id="edge-right" class="edge right hidden">›</div></div>
  <section id="board" class="board hidden" aria-live="polite"><button id="close-board" aria-label="Zavřít odjezdovou tabuli">×</button><header><h2 id="board-name"></h2><p id="board-platform"></p></header><div id="departures"></div><p id="board-note"></p></section>
  <aside id="debug" class="debug hidden"></aside>
