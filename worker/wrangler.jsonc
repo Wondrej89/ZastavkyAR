@@ -1,10 +1,9 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
   "name": "pid-ar-api",
   "main": "src/index.js",
-  "compatibility_date": "2026-09-01",
+  "compatibility_date": "2026-09-11",
   "vars": {
-    "CACHE_TTL_SECONDS": "20",
-    "ALLOWED_ORIGIN": "https://YOUR_ACCOUNT.github.io"
+    "ALLOWED_ORIGIN": "https://wondrej89.github.io",
+    "CACHE_TTL_SECONDS": "20"
   }
 }
