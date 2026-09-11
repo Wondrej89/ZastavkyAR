@@ -46,7 +46,7 @@ GPS update vybere kandidáty jen z okolních grid cells a spočítá Haversine v
 Aktuální adaptér cílí na stabilní public-transport departure-board endpoint Golemio `GET https://api.golemio.cz/v2/pid/departureboards`; tento upstream existuje pouze ve Workeru. Před produkčním nasazením doporučujeme znovu porovnat parametry s aktuální Golemio OpenAPI dokumentací, protože provider může kontrakt měnit. Klientský kontrakt je:
 
 * `GET /health` → `200 {"ok":true}`; nikdy nevolá upstream a nepřijímá query parametry.
-* `GET /departures?stop=<ID>` → `200 {stop, departures, updatedAt}`. Každá položka má `{route,destination,minutes,scheduledTime,realtime,delaySeconds,platform}`.
+* `GET /departures?stop=<ID>` → `200 {stop, departures, updatedAt}`. Každá položka má `{route,destination,minutes,scheduledTime,predictedTime,realtime,delaySeconds,platform}`. Worker posílá upstreamu `includeMetroTrains=false`, protože ID označuje konkrétní fyzické stanoviště.
 * `stop` je povinný, max. 64 znaků a smí obsahovat jen ASCII písmena, čísla, `_ . : -`. Neznámé parametry vrací `400`; jiné cesty `404`; jiné metody `405`.
 * Upstream/auth chyba vrací `502`/`503` v normalizovaném JSON. CORS povolí pouze nakonfigurované originy.
 * `caches.default` cachuje jednotlivé stop ID standardně 20 sekund. In-memory promise coalescing navíc sloučí souběžné cache-miss požadavky v jedné Worker isolate.
@@ -61,6 +61,25 @@ Frontend po otevření načte okamžitě, potom nejvýše jednou za 20 sekund. P
 4. Nasaďte Worker a ověřte `https://<worker>.workers.dev/health`.
 5. Do `CONFIG.apiBaseUrl` v `js/config.js` vložte veřejný Worker origin bez koncového lomítka a znovu nasaďte Pages.
 6. V GitHub Settings → Pages nastavte Source na **GitHub Actions**. Workflow `.github/workflows/pages.yml` obslouží push, ruční i denní deploy.
+
+### Ověření produkčního datasetu
+
+Repozitářový `data/pid-stops.json` je záměrně **prázdný fallback pouze pro lokální development**. Neobsahuje žádná ukázková ani produkční PID fakta; zejména z něj nelze odvozovat název zastávky pro `U1071Z2P`. Metadata fallbacku mají `bootstrap: true`, `datasetKind: "empty-development-fallback"` a nulový počet markerů. GitHub Pages workflow tento soubor před vytvořením artefaktu vždy přepíše spuštěním `npm run update-data` nad výchozím `https://data.pid.cz/PID_GTFS.zip`.
+
+Po úspěšném Pages deployi ověřte publikovaná metadata (za `BASE` dosaďte Pages URL):
+
+```bash
+BASE=https://uzivatel.github.io/ZastavkyAR
+curl -fsSL "$BASE/data/pid-stops-meta.json" | jq -e '
+  .bootstrap == false and
+  .datasetKind == "generated-from-pid-gtfs" and
+  .source == "https://data.pid.cz/PID_GTFS.zip" and
+  .markerCount > 0 and
+  (.version | test("^[0-9a-f]{16}$"))'
+curl -fsSL "$BASE/data/pid-stops.json" | jq -e '.stops | length > 0'
+```
+
+Oba příkazy musí skončit s návratovým kódem `0`. V odpovídajícím GitHub Actions běhu lze navíc v kroku `npm run update-data` zkontrolovat hlášení `Vytvořeno … markerů`; deploy job musí navazovat na tentýž úspěšný build artefakt.
 
 Jediný povinný secret je `GOLEMIO_API_KEY`. Plain-text Worker variables jsou `ALLOWED_ORIGIN` a volitelný `CACHE_TTL_SECONDS`; žádná frontendová environment variable ani secret není potřeba.
 
