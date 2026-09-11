@@ -7,5 +7,6 @@ export function formatDatasetDate(meta, locale = 'cs-CZ') {
 }
 
 export function datasetReadyMessage(meta, locale = 'cs-CZ') {
-  return `Data zastávek: ${formatDatasetDate(meta, locale)}\nPočet zastávek: ${meta?.markerCount ?? 0}`;
+  const count = new Intl.NumberFormat(locale).format(meta?.markerCount ?? 0);
+  return `Data zastávek: ${formatDatasetDate(meta, locale)}\n${count} zastávek`;
 }
