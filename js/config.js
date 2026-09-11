@@ -1,5 +1,5 @@
 export const CONFIG = Object.freeze({
-  apiBaseUrl: '',
+  apiBaseUrl: 'https://pid-ar-api.wondrej-blogspot.workers.dev',
   datasetUrl: './data/pid-stops.json',
   datasetMetaUrl: './data/pid-stops-meta.json',
   nearbyRadiusMeters: 300,
