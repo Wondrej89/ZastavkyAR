@@ -1,0 +1,3 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {haversine,bearing,angleDifference,buildGrid,nearbyFromGrid} from '../js/geo.js';
+test('geodesy and wrapped angle',()=>{assert.ok(haversine({latitude:50,longitude:14},{latitude:50.001,longitude:14})>110);assert.ok(Math.abs(bearing({latitude:50,longitude:14},{latitude:51,longitude:14}))<.01);assert.equal(angleDifference(5,355),10)});
+test('grid returns only nearby stops',()=>{const stops=[{id:'a',lat:50,lon:14},{id:'b',lat:51,lon:14}],grid=buildGrid(stops,.005);assert.deepEqual(nearbyFromGrid(grid,{latitude:50,longitude:14},300,.005).map(x=>x.id),['a'])});
