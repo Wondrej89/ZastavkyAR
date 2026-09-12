@@ -24,6 +24,10 @@ function numericDelay(delay) {
   return null;
 }
 
+function optionalBoolean(value) {
+  return typeof value === 'boolean' ? value : null;
+}
+
 export function normalize(payload, now = Date.now()) {
   const rows = payload.departures || payload.data?.departures || [];
   return rows.map(item => {
@@ -39,6 +43,8 @@ export function normalize(payload, now = Date.now()) {
       realtime: Boolean(predictedTime && item.delay?.is_available),
       delaySeconds: numericDelay(item.delay),
       platform: item.stop?.platform_code || null,
+      wheelchairAccessible: optionalBoolean(item.trip?.is_wheelchair_accessible),
+      airConditioned: optionalBoolean(item.trip?.is_air_conditioned),
     };
   }).filter(item => item.route || item.destination);
 }
@@ -54,6 +60,7 @@ async function upstream(stop, env, includeMetro = false) {
   url.searchParams.set('minutesBefore', '0');
   url.searchParams.set('minutesAfter', '180');
   url.searchParams.set('includeMetroTrains', String(includeMetro));
+  url.searchParams.set('airCondition', 'true');
   const response = await fetch(url, { headers: { 'X-Access-Token': env.GOLEMIO_API_KEY, Accept: 'application/json' } });
   if (!response.ok) return json({ error: 'Golemio request failed', upstreamStatus: response.status }, 502);
   const payload = await response.json();
