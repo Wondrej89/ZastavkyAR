@@ -1,5 +1,18 @@
 export const ALL_MODES = [0,1,2,3,4,7,11];
 export function markerModes(marker) { return marker.kind==='metro_entrance'||marker.kind==='metro_station'?[1]:marker.kind==='train_station'?[2]:(marker.modes||[]); }
+const ACCESSIBLE_MODE_NAMES = new Map([[0,'tramvajová zastávka'],[1,'stanice metra'],[2,'železniční stanice'],[3,'autobusová zastávka'],[4,'přístaviště přívozu'],[7,'stanice lanovky'],[11,'trolejbusová zastávka']]);
+
+function joinCzech(items) {
+  if(items.length<2)return items[0]||'';
+  return `${items.slice(0,-1).join(', ')} a ${items.at(-1)}`;
+}
+
+export function markerAriaLabel(marker, showNight=false) {
+  const modes=markerModes(marker),isMetro=modes.length===1&&modes[0]===1;
+  const type=modes.length===1?ACCESSIBLE_MODE_NAMES.get(modes[0]):'zastávka';
+  const details=isMetro&&marker.lines?.length?`, linky ${joinCzech(marker.lines)}`:marker.platform?`, stanoviště ${marker.platform}`:'';
+  return `${type}${showNight?', noční provoz':''} ${marker.name}${details}`;
+}
 export function filterMarkers(markers, enabled) { return markers.filter(marker=>markerModes(marker).some(mode=>enabled.has(mode))); }
 export function deduplicateMetroEntrances(markers) {
   const nearest=new Map();
