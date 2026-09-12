@@ -15,7 +15,7 @@ export function setupInstallUx({ button, dialog, message, closeButton, window = 
   const updateButton = () => button.classList.toggle('hidden', isStandalone({ media: window.matchMedia.bind(window), navigator }));
   const openInstructions = () => {
     message.textContent = isIOS(navigator)
-      ? 'Klepněte na Sdílet → Přidat na plochu.'
+      ? 'Na iOS se instalace na plochu provádí přes tlačítko „Sdílet“ a „Přidat na plochu“.'
       : 'Aplikaci můžete přidat na domovskou obrazovku z menu prohlížeče.';
     dialog.showModal();
   };

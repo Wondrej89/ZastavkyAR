@@ -52,12 +52,26 @@ test('native install prompt is used when Chromium provides it', async () => {
   assert.equal(harness.dialog.opened, false);
 });
 
-test('iOS opens Add to Home Screen instructions without a native prompt', async () => {
-  const harness = installHarness({ navigator: { userAgent: 'Mozilla/5.0 (iPhone)' } });
+test('Safari on iOS opens Add to Home Screen instructions without a native prompt', async () => {
+  const harness = installHarness({ navigator: { userAgent: 'Mozilla/5.0 (iPhone) Version/18.0 Mobile/15E148 Safari/604.1' } });
   assert.equal(harness.classes.has('hidden'), false);
   await harness.buttonListeners.click();
   assert.equal(harness.dialog.opened, true);
-  assert.equal(harness.message.textContent, 'Klepněte na Sdílet → Přidat na plochu.');
+  assert.equal(harness.message.textContent, 'Na iOS se instalace na plochu provádí přes tlačítko „Sdílet“ a „Přidat na plochu“.');
+});
+
+test('Chrome on iOS opens the same Add to Home Screen instructions', async () => {
+  const harness = installHarness({ navigator: { userAgent: 'Mozilla/5.0 (iPhone) CriOS/128.0 Mobile/15E148 Safari/604.1' } });
+  await harness.buttonListeners.click();
+  assert.equal(harness.dialog.opened, true);
+  assert.equal(harness.message.textContent, 'Na iOS se instalace na plochu provádí přes tlačítko „Sdílet“ a „Přidat na plochu“.');
+});
+
+test('desktop Safari retains the generic installation instructions', async () => {
+  const harness = installHarness({ navigator: { userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Version/18.0 Safari/605.1.15', platform: 'MacIntel', maxTouchPoints: 0 } });
+  await harness.buttonListeners.click();
+  assert.equal(harness.dialog.opened, true);
+  assert.equal(harness.message.textContent, 'Aplikaci můžete přidat na domovskou obrazovku z menu prohlížeče.');
 });
 
 test('standalone PWA keeps the install button hidden', () => {
