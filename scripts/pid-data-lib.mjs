@@ -69,7 +69,8 @@ export function buildMarkersWithStats({ stops, routes, trips, stopTimes }) {
       const lineEntries = modes.flatMap(mode => [...(usage.get(stop.stop_id)?.get(mode)?.entries() || [])].map(([line,isNight]) => ({ line, isNight })));
       const nightLines = lineEntries.filter(item => item.isNight).map(item => item.line).filter(Boolean);
       const dayLines = lineEntries.filter(item => !item.isNight).map(item => item.line).filter(Boolean);
-      add(stop, { kind:'surface', modes, hasNightService:nightLines.length > 0, nightLines:[...new Set(nightLines)], dayLines:[...new Set(dayLines)] });
+      const hasNightService = lineEntries.some(item => item.isNight), hasDayService = lineEntries.some(item => !item.isNight);
+      add(stop, { kind:'surface', modes, hasNightService, hasDayService, nightOnly:hasNightService && !hasDayService, nightLines:[...new Set(nightLines)], dayLines:[...new Set(dayLines)] });
     }
   }
 
