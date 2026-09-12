@@ -19,9 +19,8 @@ export class OrientationController {
     this.config={headingPublishIntervalMs:100,headingBufferSize:10,headingStabilizationMs:1000,headingInitializationSpreadDeg:8,headingDeadbandDeg:2.5,compassCorrectionAlpha:.025,compassCorrectionMaxDegPerSecond:3,compassMaxErrorDeg:45,orientationStartupFallbackMs:2000,...config};
     this.heading=null;this.relativeHeading=null;this.compassHeading=null;this.compassCorrection=0;this.initializationStartedAt=null;this.lastPublishedAt=-Infinity;this.lastFusionAt=null;this.lastRelativeRaw=null;this.compassSamples=[];this.relativeCandidate=null;this.hasRelativeEvents=false;this.spreadWarningShown=false;this.relativeWarningShown=false;this.accuracyWarningShown=false;this.handler=this.handle.bind(this);
   }
-  async start() {
+  start() {
     if (typeof DeviceOrientationEvent === 'undefined') throw new Error('Orientace není podporována');
-    if (typeof DeviceOrientationEvent.requestPermission === 'function' && await DeviceOrientationEvent.requestPermission() !== 'granted') throw new Error('Orientace nebyla povolena');
     this.initializationStartedAt=this.now();
     window.addEventListener('deviceorientationabsolute',this.handler,true);
     window.addEventListener('deviceorientation',this.handler,true);
