@@ -33,7 +33,7 @@ Skript čte `stops.txt`, `routes.txt`, `trips.txt` a `stop_times.txt`, ale do kl
 
 ### Konsolidace markerů
 
-Route type se přes trip/stop-time připojí k místu. Surface stop (`location_type=0`) zůstává samostatný podle parent station, platform code a souřadnice zaokrouhlené na 5 desetinných míst: Anděl A/B/C proto zůstávají oddělené, ale identické virtuální duplikáty stejného sloupku se sloučí. Pomocné lokace nejsou markerem. Železnice (`route_type=2`) se agreguje na jeden station-level marker. Metro (`route_type=1`) použije `location_type=2` entrances dané parent station; chybí-li vstupy, použije station centroid. Přestupní stanice uchovává pole linek/módů a po výběru vždy otevírá stabilní screen-space tabuli, nikoli falešné podzemní AR.
+Route type se přes trip/stop-time připojí k místu. Surface stop (`location_type=0`) zůstává samostatný podle parent station, platform code a souřadnice zaokrouhlené na 5 desetinných míst: Anděl A/B/C proto zůstávají oddělené, ale identické virtuální duplikáty stejného sloupku se sloučí. Pomocné lokace nejsou markerem. Železnice (`route_type=2`) se agreguje na jeden station-level marker; body, které mají ve všech vlakových `stop_times` současně `pickup_type=1` a `drop_off_type=1`, se jako technické body vyřadí. Metro (`route_type=1`) použije `location_type=2` entrances dané parent station; chybí-li vstupy, použije station centroid. Přestupní stanice uchovává pole linek/módů a po výběru vždy otevírá stabilní screen-space tabuli, nikoli falešné podzemní AR.
 
 ## Telefon, offline režim a AR
 
