@@ -8,5 +8,5 @@ export function formatDatasetDate(meta, locale = 'cs-CZ') {
 
 export function datasetReadyMessage(meta, locale = 'cs-CZ') {
   const count = new Intl.NumberFormat(locale).format(meta?.markerCount ?? 0);
-  return `Data zastávek: ${formatDatasetDate(meta, locale)}\n${count} zastávek`;
+  return `Data zastávek aktualizována: ${formatDatasetDate(meta, locale)}\n${count} míst v databázi PID`;
 }
