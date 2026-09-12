@@ -49,9 +49,10 @@ export function isNightServiceTime(date, startHour, endHour) {
     : localHour >= startHour || localHour < endHour;
 }
 
-export function markerHasNightIndicator(marker, date, config) {
+export function markerHasNightIndicator(marker, date, config, showNightStopsDuringDay = true) {
   const { hasNightService, nightOnly } = markerServiceTypes(marker);
-  return hasNightService && (nightOnly || isNightServiceTime(date, config.nightServiceStartHour, config.nightServiceEndHour));
+  const isNightTime=isNightServiceTime(date, config.nightServiceStartHour, config.nightServiceEndHour);
+  return hasNightService && (isNightTime || (showNightStopsDuringDay && nightOnly));
 }
 
 export function departureHasNightIndicator(departure = {}) {
