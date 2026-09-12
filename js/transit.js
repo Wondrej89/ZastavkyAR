@@ -25,13 +25,36 @@ export function isNightRoute(route = {}) {
     (number >= 901 && number <= 917) || (number >= 951 && number <= 960);
 }
 
-export function transitIconNames(modes = [], hasNightService = false) {
+export function transitIconNames(modes = [], showNightService = false) {
   const uniqueModes = [...new Set(modes.map(Number))];
   const icons = uniqueModes.map(mode => TRANSIT_ICONS[mode]).filter(Boolean);
-  if (hasNightService && uniqueModes.some(mode => NIGHT_CAPABLE_MODES.has(mode))) icons.push('travel-night.svg');
+  if (showNightService && uniqueModes.some(mode => NIGHT_CAPABLE_MODES.has(mode))) icons.push('travel-night.svg');
   return icons;
 }
 
+export function markerServiceTypes(marker = {}) {
+  const hasNightService = marker.hasNightService === true || (Array.isArray(marker.nightLines) && marker.nightLines.length > 0);
+  const hasDayService = marker.hasDayService === true || (Array.isArray(marker.dayLines) && marker.dayLines.length > 0);
+  return { hasNightService, hasDayService, nightOnly:hasNightService && !hasDayService };
+}
+
+export function isNightServiceTime(date, startHour, endHour) {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone:'Europe/Prague', hour:'2-digit', minute:'2-digit', second:'2-digit', hourCycle:'h23',
+  }).formatToParts(date);
+  const value = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  const localHour = Number(value.hour) + Number(value.minute) / 60 + Number(value.second) / 3600;
+  return startHour < endHour
+    ? localHour >= startHour && localHour < endHour
+    : localHour >= startHour || localHour < endHour;
+}
+
+export function markerHasNightIndicator(marker, date, config) {
+  const { hasNightService, nightOnly } = markerServiceTypes(marker);
+  return hasNightService && (nightOnly || isNightServiceTime(date, config.nightServiceStartHour, config.nightServiceEndHour));
+}
+
 export function departureHasNightIndicator(departure = {}) {
-  return departure.isNight === true || isNightRoute({ route_short_name:departure.route, route_type:departure.routeType });
+  const route = { route_short_name:departure.route, route_type:departure.routeType };
+  return (departure.isNight === true && NIGHT_CAPABLE_MODES.has(Number(departure.routeType))) || isNightRoute(route);
 }

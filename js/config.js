@@ -9,6 +9,8 @@ export const CONFIG = Object.freeze({
   selectionDwellMs: 800,
   selectionLockMs: 1400,
   realtimeRefreshMs: 20000,
+  nightServiceStartHour: 23.5,
+  nightServiceEndHour: 5.5,
   lowAccuracyMeters: 80,
   maxMarkers: 24,
   gpsSampleCount: 7,
