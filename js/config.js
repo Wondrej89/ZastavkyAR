@@ -3,6 +3,7 @@ export const CONFIG = Object.freeze({
   datasetUrl: './data/pid-stops.json',
   datasetMetaUrl: './data/pid-stops-meta.json',
   nearbyRadiusMeters: 300,
+  nearStopPriorityDistanceM: 100,
   gridCellDegrees: 0.005,
   horizontalFovDeg: 60,
   selectionAngleDeg: 8,
