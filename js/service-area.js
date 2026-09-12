@@ -1,0 +1,8 @@
+const EARTH_RADIUS=6371008.8;
+function inRing([x,y],ring){let inside=false;for(let i=0,j=ring.length-1;i<ring.length;j=i++){const [xi,yi]=ring[i],[xj,yj]=ring[j];if((yi>y)!==(yj>y)&&x<(xj-xi)*(y-yi)/(yj-yi)+xi)inside=!inside}return inside}
+export function pointInServiceArea(position,feature){const point=[position.longitude,position.latitude];return feature?.geometry?.coordinates?.some(polygon=>inRing(point,polygon[0])&&!polygon.slice(1).some(hole=>inRing(point,hole)))??false}
+function boundaryDistance(position,feature){const lat=position.latitude*Math.PI/180,scaleX=Math.cos(lat)*Math.PI/180*EARTH_RADIUS,scaleY=Math.PI/180*EARTH_RADIUS;let best=Infinity;for(const polygon of feature?.geometry?.coordinates||[])for(const ring of polygon)for(let i=1;i<ring.length;i++){const a=[(ring[i-1][0]-position.longitude)*scaleX,(ring[i-1][1]-position.latitude)*scaleY],b=[(ring[i][0]-position.longitude)*scaleX,(ring[i][1]-position.latitude)*scaleY],dx=b[0]-a[0],dy=b[1]-a[1],t=Math.max(0,Math.min(1,-(a[0]*dx+a[1]*dy)/(dx*dx+dy*dy||1)));best=Math.min(best,Math.hypot(a[0]+t*dx,a[1]+t*dy))}return best}
+export class ServiceAreaTracker{
+ constructor(feature,{maxAccuracyMeters=100,confirmations=3}={}){this.feature=feature;this.maxAccuracyMeters=maxAccuracyMeters;this.confirmations=confirmations;this.outsideCount=0}
+ update(position){if(!this.feature||position.accuracy>this.maxAccuracyMeters){this.outsideCount=0;return'unknown'}const inside=pointInServiceArea(position,this.feature),nearBoundary=boundaryDistance(position,this.feature)<=Math.max(position.accuracy,100);if(inside||nearBoundary){this.outsideCount=0;return'inside'}this.outsideCount++;return this.outsideCount>=this.confirmations?'outside':'pending'}
+}

@@ -1,6 +1,6 @@
 importScripts('./sw-version.js');
 const CACHE = `pid-ar-shell-${self.PID_AR_BUILD_VERSION}`;
-const SHELL = ['./','./index.html','./styles.css','./manifest.webmanifest','./icons/icon.svg','./icons/icon-192.svg','./icons/icon-512.svg','./js/app.js','./js/build-update.js','./js/build-version.js','./js/config.js','./js/dataset-status.js','./js/enhanced-ar.js','./js/geo.js','./js/storage.js','./js/orientation.js','./js/permissions.js','./js/markers.js','./js/position-stabilizer.js','./api/departures.js'];
+const SHELL = ['./','./index.html','./styles.css','./manifest.webmanifest','./icons/icon.svg','./icons/icon-192.svg','./icons/icon-512.svg','./js/app.js','./js/build-update.js','./js/build-version.js','./js/config.js','./js/dataset-status.js','./js/enhanced-ar.js','./js/geo.js','./js/service-area.js','./js/storage.js','./js/orientation.js','./js/permissions.js','./js/markers.js','./js/position-stabilizer.js','./api/departures.js'];
 self.addEventListener('install', event => event.waitUntil((async () => {
   const cache = await caches.open(CACHE);
   try {
@@ -22,7 +22,7 @@ self.addEventListener('activate', event => event.waitUntil(caches.keys().then(ke
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
-  if (url.pathname.includes('/data/pid-stops') || url.pathname.endsWith('/build-version.json')) return;
+  if (url.pathname.includes('/data/pid-stops') || url.pathname.endsWith('/data/pid-service-area.json') || url.pathname.endsWith('/build-version.json')) return;
   const shellAsset = url.origin === location.origin && (event.request.mode === 'navigate' || /\.(?:js|css|html)$/.test(url.pathname));
   const networkRequest = shellAsset ? new Request(event.request, { cache: 'reload' }) : event.request;
   event.respondWith(fetch(networkRequest).then(response => {

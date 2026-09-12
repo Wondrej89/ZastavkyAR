@@ -20,6 +20,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: {node-version: 22}
       - run: npm run update-data
+      - run: npm run build-service-area
       - name: Create deployment version
         run: npm run build-version
       - uses: actions/configure-pages@v5
