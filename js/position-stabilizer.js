@@ -6,7 +6,13 @@ export class PositionStabilizer {
     if(!Number.isFinite(fix.latitude)||!Number.isFinite(fix.longitude)||!Number.isFinite(fix.accuracy))return;
     this.samples.push(fix);this.samples=this.samples.slice(-this.config.gpsSampleCount);
     const quality=this.samples.filter(s=>s.accuracy<=this.config.gpsSampleMaxAccuracy);
-    if(!this.anchor){if(fix.accuracy>this.config.gpsAnchorAccuracyMeters&&this.now()-this.started<this.config.gpsStartupTimeoutMs)return;this.publish(this.average(quality.length?quality:[fix]));return}
+    if(!this.anchor){
+      const candidates=quality.slice(-this.config.gpsAnchorSampleCount),timedOut=this.now()-this.started>=this.config.gpsStartupTimeoutMs;
+      if(!timedOut&&(fix.accuracy>this.config.gpsAnchorAccuracyMeters||candidates.length<this.config.gpsAnchorSampleCount))return;
+      const stable=candidates.length&&candidates.every(sample=>haversine(candidates[0],sample)<=this.config.gpsAnchorSpreadMeters);
+      if(!timedOut&&!stable)return;
+      this.publish(this.average(stable?candidates:(quality.length?quality:[fix])));return;
+    }
     const distance=haversine(this.anchor,fix),improved=fix.accuracy<=this.anchor.accuracy*this.config.gpsAccuracyImprovementRatio;
     // A low sensor speed means GPS scatter, unless the new fix is materially better.
     if(Number.isFinite(fix.speed)&&fix.speed<this.config.gpsStaticSpeedMps&&!improved){this.pending=[];return}
