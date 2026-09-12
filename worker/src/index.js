@@ -43,19 +43,23 @@ export function normalize(payload, now = Date.now()) {
   }).filter(item => item.route || item.destination);
 }
 
-async function upstream(stop, env) {
+export function mergeDepartures(groups) {
+  const seen=new Set();return groups.flat().sort((a,b)=>(new Date(a.predictedTime||a.scheduledTime||Infinity))-(new Date(b.predictedTime||b.scheduledTime||Infinity))).filter(row=>{const key=[row.route,row.destination,row.predictedTime||row.scheduledTime,row.platform].join('|');if(seen.has(key))return false;seen.add(key);return true});
+}
+async function upstream(stop, env, includeMetro = false) {
   if (!env.GOLEMIO_API_KEY) return json({ error: 'Worker nemá nastavený GOLEMIO_API_KEY.' }, 503);
   const url = new URL(GOLEMIO_URL);
   url.searchParams.set('ids', stop);
   url.searchParams.set('limit', '20');
   url.searchParams.set('minutesBefore', '0');
   url.searchParams.set('minutesAfter', '180');
-  url.searchParams.set('includeMetroTrains', 'false');
+  url.searchParams.set('includeMetroTrains', String(includeMetro));
   const response = await fetch(url, { headers: { 'X-Access-Token': env.GOLEMIO_API_KEY, Accept: 'application/json' } });
   if (!response.ok) return json({ error: 'Golemio request failed', upstreamStatus: response.status }, 502);
   const payload = await response.json();
   return json({ stop, departures: normalize(payload), updatedAt: new Date().toISOString() }, 200);
 }
+async function upstreamMany(stops,env){const responses=await Promise.all(stops.map(stop=>upstream(stop,env,true)));const failed=responses.find(r=>!r.ok);if(failed)return failed;const payloads=await Promise.all(responses.map(r=>r.json()));return json({stops,departures:mergeDepartures(payloads.map(p=>p.departures)),updatedAt:new Date().toISOString()},200)}
 
 export default {
   async fetch(request, env, ctx) {
@@ -66,12 +70,14 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === '/health' && url.search === '') return json({ ok: true }, 200, headers);
     if (url.pathname !== '/departures') return json({ error: 'Not found' }, 404, headers);
-    const known = new Set(['stop']);
+    const known = new Set(['stop','stops']);
     for (const key of url.searchParams.keys()) if (!known.has(key)) return json({ error: `Unknown parameter: ${key}` }, 400, headers);
-    const stop = url.searchParams.get('stop');
-    if (!stop || stop.length > 64 || !/^[A-Za-z0-9_.:-]+$/.test(stop)) return json({ error: 'Invalid stop' }, 400, headers);
+    if(url.searchParams.has('stop')&&url.searchParams.has('stops'))return json({error:'Use stop or stops, not both'},400,headers);
+    const raw=url.searchParams.get('stops')||url.searchParams.get('stop')||'';const stops=[...new Set(raw.split(',').filter(Boolean))].sort();
+    if(!stops.length||stops.length>4||stops.some(stop=>stop.length>64||!/^[A-Za-z0-9_.:-]+$/.test(stop)))return json({error:'Invalid stop(s)'},400,headers);
+    const stop=stops.join(',');
     const ttl = Math.max(5, Math.min(300, Number(env.CACHE_TTL_SECONDS) || 20));
-    const cacheKey = new Request(`${url.origin}/departures?stop=${encodeURIComponent(stop)}`, { method: 'GET' });
+    const cacheKey = new Request(`${url.origin}/departures?${stops.length>1?'stops':'stop'}=${encodeURIComponent(stop)}`, { method: 'GET' });
     const cached = await caches.default.match(cacheKey);
     if (cached) {
       const out = new Response(cached.body, cached);
@@ -81,7 +87,7 @@ export default {
     }
     let promise = inFlight.get(stop);
     if (!promise) {
-      promise = upstream(stop, env).finally(() => inFlight.delete(stop));
+      promise = (stops.length===1?upstream(stops[0],env):upstreamMany(stops,env)).finally(() => inFlight.delete(stop));
       inFlight.set(stop, promise);
     }
     const result = await promise;
