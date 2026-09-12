@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { collisionLayout, markerPresentation } from '../js/markers.js';
+import { collisionLayout, markerAriaLabel, markerPresentation } from '../js/markers.js';
 import { markerHasNightIndicator } from '../js/transit.js';
 import { CONFIG } from '../js/config.js';
 
@@ -39,4 +39,9 @@ test('night-stop daytime filter only changes AR marker indication during the day
   assert.equal(markerHasNightIndicator(marker,day,CONFIG,false),false);
   assert.equal(markerHasNightIndicator(marker,day,CONFIG,true),true);
   assert.equal(markerHasNightIndicator(marker,night,CONFIG,false),true);
+});
+
+test('marker accessibility distinguishes metro lines from a surface platform',()=>{
+  assert.equal(markerAriaLabel({kind:'metro_entrance',name:'Muzeum',lines:['A','C']}),'stanice metra Muzeum, linky A a C');
+  assert.equal(markerAriaLabel({kind:'stop',modes:[0],name:'I. P. Pavlova',platform:'B'}),'tramvajová zastávka I. P. Pavlova, stanoviště B');
 });
