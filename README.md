@@ -39,7 +39,7 @@ Route type se přes trip/stop-time připojí k místu. Surface stop (`location_t
 
 První návštěva stáhne JSON se zobrazeným průběhem a v jediné IndexedDB transakci uloží data a metadata: obsahovou `version`, serverové `generatedAt`, lokální `storedAt` a `checkedAt`. Další start nejprve čte lokální kopii, ihned vytvoří grid (buňky 0,005°) a až potom na pozadí kontroluje metadata. Nová verze nahradí celý objekt atomicky. Bez sítě fungují app shell, kamera, GPS, grid a markery; nefunguje jen realtime.
 
-GPS update vybere kandidáty jen z okolních grid cells a spočítá Haversine vzdálenost a bearing. Device Orientation je izolována v `js/orientation.js`; iOS permission se žádá až kliknutím na **Spustit AR**. Rozdíl bearing/heading se přes konfigurované horizontální FOV mapuje na X. Výška je fixní a netvrdí centimetrové world tracking. Marker lze tapnout nebo vybrat 800ms setrváním v reticle, následovaným selection lockem. Laditelné hodnoty jsou v `js/config.js`.
+GPS update vybere kandidáty jen z okolních grid cells a spočítá Haversine vzdálenost a bearing. Device Orientation je izolována v `js/orientation.js`; iOS permission se žádá až kliknutím na **Hledat zastávky**. Rozdíl bearing/heading se přes konfigurované horizontální FOV mapuje na X. Výška je fixní a netvrdí centimetrové world tracking. Marker lze tapnout nebo vybrat 800ms setrváním v reticle, následovaným selection lockem. Laditelné hodnoty jsou v `js/config.js`.
 
 ## Realtime Worker contract
 
