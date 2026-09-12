@@ -11,5 +11,17 @@ export const CONFIG = Object.freeze({
   realtimeRefreshMs: 20000,
   lowAccuracyMeters: 80,
   maxMarkers: 24,
+  gpsSampleCount: 7,
+  gpsSampleMaxAccuracy: 60,
+  gpsAnchorAccuracyMeters: 30,
+  gpsStartupTimeoutMs: 8000,
+  gpsDeadbandMeters: 4,
+  gpsMoveThresholdMeters: 9,
+  gpsAccuracyImprovementRatio: 0.65,
+  gpsInterpolationAlpha: 0.3,
+  headingSmoothingAlpha: 0.2,
+  headingDeadbandDeg: 1.5,
+  compassMaxErrorDeg: 45,
+  orientationSourceLockMs: 3000,
   debugPosition: { latitude: 50.0715, longitude: 14.4039, accuracy: 8 }
 });
