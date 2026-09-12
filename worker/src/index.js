@@ -1,3 +1,5 @@
+import { isNightRoute } from '../../js/transit.js';
+
 const GOLEMIO_URL = 'https://api.golemio.cz/v2/pid/departureboards';
 const inFlight = new Map();
 const json = (value, status, headers = {}) => new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json; charset=utf-8', ...headers } });
@@ -34,8 +36,11 @@ export function normalize(payload, now = Date.now()) {
     const predictedTime = isoTimestamp(item.departure_timestamp?.predicted);
     const scheduledTime = isoTimestamp(item.departure_timestamp?.scheduled);
     const departureTime = predictedTime || scheduledTime;
+    const routeType = Number(item.route?.type ?? item.route?.route_type);
     return {
       route: String(item.route?.short_name || ''),
+      routeType: Number.isFinite(routeType) ? routeType : null,
+      isNight: isNightRoute({ route_short_name:item.route?.short_name, route_type:routeType }),
       destination: item.trip?.headsign || '',
       minutes: departureTime ? Math.max(0, Math.round((new Date(departureTime).getTime() - now) / 60000)) : null,
       scheduledTime,

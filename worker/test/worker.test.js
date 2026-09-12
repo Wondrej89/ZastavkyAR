@@ -27,6 +27,8 @@ test('normalizes current Golemio departure board fields and prefers predicted ti
 
   assert.deepEqual(normalize(payload, new Date('2026-09-11T10:00:00Z').getTime()), [{
     route: '9',
+    routeType: null,
+    isNight: false,
     destination: 'Sídliště Řepy',
     minutes: 2,
     scheduledTime: '2026-09-11T10:01:30.000Z',
@@ -47,6 +49,15 @@ test('preserves unknown accessibility and air-conditioning states as null', () =
 
   assert.equal(rows[0].wheelchairAccessible, null);
   assert.equal(rows[0].airConditioned, null);
+});
+
+test('normalizes a night departure without treating rail as night', () => {
+  const rows = normalize({ departures: [
+    { route: { short_name: '93', type: 0 }, trip: { headsign: 'Sídliště Ďáblice' } },
+    { route: { short_name: '93', type: 2 }, trip: { headsign: 'Denní vlak' } },
+  ] });
+  assert.equal(rows[0].isNight, true);
+  assert.equal(rows[1].isNight, false);
 });
 
 test('falls back to scheduled time and always emits a numeric or null delay', () => {

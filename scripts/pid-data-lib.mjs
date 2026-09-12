@@ -1,8 +1,11 @@
+import { isNightRoute } from '../js/transit.js';
+
 export function buildMarkersWithStats({ stops, routes, trips, stopTimes }) {
   const routeById = new Map(routes.map(route => [route.route_id, route]));
   const tripById = new Map(trips.map(trip => [trip.trip_id, trip]));
   const usage = new Map();
   const passengerRailStops = new Set();
+  const nightRoutes = new Set(routes.filter(isNightRoute).map(route => route.route_id));
 
   for (const time of stopTimes) {
     const trip = tripById.get(time.trip_id);
@@ -11,8 +14,9 @@ export function buildMarkersWithStats({ stops, routes, trips, stopTimes }) {
 
     if (!usage.has(time.stop_id)) usage.set(time.stop_id, new Map());
     const routeType = Number(route.route_type);
-    if (!usage.get(time.stop_id).has(routeType)) usage.get(time.stop_id).set(routeType, new Set());
-    usage.get(time.stop_id).get(routeType).add(route.route_short_name || route.route_long_name || '');
+    if (!usage.get(time.stop_id).has(routeType)) usage.get(time.stop_id).set(routeType, new Map());
+    const routeName = route.route_short_name || route.route_long_name || '';
+    usage.get(time.stop_id).get(routeType).set(routeName, usage.get(time.stop_id).get(routeType).get(routeName) || nightRoutes.has(route.route_id));
 
     // In GTFS an empty pickup/drop-off value means regular service. A railway
     // stop is therefore technical only when both values are explicitly 1 on
@@ -30,7 +34,12 @@ export function buildMarkersWithStats({ stops, routes, trips, stopTimes }) {
   const statistics = {
     railwayPassengerStops: [...railwayStopIds].filter(id => passengerRailStops.has(id)).length,
     railwayTechnicalStopsExcluded: [...railwayStopIds].filter(id => !passengerRailStops.has(id)).length,
+    nightRoutesByMode: {},
   };
+  for (const route of routes) if (nightRoutes.has(route.route_id)) {
+    const mode = Number(route.route_type);
+    statistics.nightRoutesByMode[mode] = (statistics.nightRoutesByMode[mode] || 0) + 1;
+  }
 
   const children = new Map();
   for (const stop of stops) if (stop.parent_station) {
@@ -57,7 +66,10 @@ export function buildMarkersWithStats({ stops, routes, trips, stopTimes }) {
     if (modes.includes(2) && modes.filter(mode => mode !== 2).length === 0) {
       if (passengerRailStops.has(stop.stop_id)) add(stop, { kind:'train_station', stationId:stop.parent_station || stop.stop_id, modes:[2] });
     } else {
-      add(stop, { kind:'surface', modes });
+      const lineEntries = modes.flatMap(mode => [...(usage.get(stop.stop_id)?.get(mode)?.entries() || [])].map(([line,isNight]) => ({ line, isNight })));
+      const nightLines = lineEntries.filter(item => item.isNight).map(item => item.line).filter(Boolean);
+      const dayLines = lineEntries.filter(item => !item.isNight).map(item => item.line).filter(Boolean);
+      add(stop, { kind:'surface', modes, hasNightService:nightLines.length > 0, nightLines:[...new Set(nightLines)], dayLines:[...new Set(dayLines)] });
     }
   }
 
@@ -66,7 +78,7 @@ export function buildMarkersWithStats({ stops, routes, trips, stopTimes }) {
     const metroStops = kids.filter(stop => Number(stop.location_type || 0) === 0 && usage.get(stop.stop_id)?.has(1));
     if (metroStops.length) {
       const departureStopIds = metroStops.map(stop => stop.stop_id).sort();
-      const lines = [...new Set(metroStops.flatMap(stop => [...usage.get(stop.stop_id).get(1)]).filter(Boolean))].sort();
+      const lines = [...new Set(metroStops.flatMap(stop => [...usage.get(stop.stop_id).get(1).keys()]).filter(Boolean))].sort();
       const entrances = kids.filter(stop => Number(stop.location_type || 0) === 2 && Number.isFinite(Number(stop.stop_lat)));
       for (const entrance of entrances) add(entrance, { kind:'metro_entrance', name:station.stop_name, entranceId:entrance.stop_id, entranceLabel:entrance.stop_name === station.stop_name ? (entrance.stop_id.match(/E[^E]*$/)?.[0] || entrance.stop_code || '') : entrance.stop_name, stationId:station.stop_id, departureStopIds, lines, modes:[1] });
       if (!entrances.length) add(station, { kind:'metro_station', stationId:station.stop_id, departureStopIds, lines, modes:[1] });
