@@ -21,7 +21,7 @@ test('normalizes current Golemio departure board fields and prefers predicted ti
     departure_timestamp: { scheduled: '2026-09-11T12:01:30+02:00', predicted: '2026-09-11T12:02:00+02:00' },
     delay: { seconds: 30, minutes: 0.5, is_available: true },
     route: { short_name: '9' },
-    trip: { headsign: 'Sídliště Řepy' },
+    trip: { headsign: 'Sídliště Řepy', is_wheelchair_accessible: true, is_air_conditioned: true },
     stop: { platform_code: 'B' },
   }] };
 
@@ -34,7 +34,19 @@ test('normalizes current Golemio departure board fields and prefers predicted ti
     realtime: true,
     delaySeconds: 30,
     platform: 'B',
+    wheelchairAccessible: true,
+    airConditioned: true,
   }]);
+});
+
+test('preserves unknown accessibility and air-conditioning states as null', () => {
+  const rows = normalize({ departures: [{
+    route: { short_name: 'A' },
+    trip: { headsign: 'Nemocnice Motol', is_wheelchair_accessible: null },
+  }] });
+
+  assert.equal(rows[0].wheelchairAccessible, null);
+  assert.equal(rows[0].airConditioned, null);
 });
 
 test('falls back to scheduled time and always emits a numeric or null delay', () => {
@@ -61,5 +73,6 @@ test('requests departures for one physical stop without metro aggregation', asyn
   const response = await worker.fetch(new Request('https://x.test/departures?stop=U123Z1P'), { GOLEMIO_API_KEY: 'test-only' }, ctx);
   assert.equal(response.status, 200);
   assert.equal(upstreamUrl.searchParams.get('includeMetroTrains'), 'false');
+  assert.equal(upstreamUrl.searchParams.get('airCondition'), 'true');
   assert.equal(upstreamUrl.searchParams.get('ids'), 'U123Z1P');
 });
