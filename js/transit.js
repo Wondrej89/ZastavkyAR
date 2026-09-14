@@ -59,3 +59,8 @@ export function departureHasNightIndicator(departure = {}) {
   const route = { route_short_name:departure.route, route_type:departure.routeType };
   return (departure.isNight === true && NIGHT_CAPABLE_MODES.has(Number(departure.routeType))) || isNightRoute(route);
 }
+
+export function departureTimeClass(departure = {}) {
+  if (!departure.realtime || !Number.isFinite(departure.delaySeconds)) return 'time';
+  return departure.delaySeconds > 60 ? 'time realtime-delayed' : 'time realtime-on-time';
+}

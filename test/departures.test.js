@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { CONFIG } from '../js/config.js';
 import { departuresUrl } from '../api/departures.js';
+import { departureTimeClass } from '../js/transit.js';
 
 test('production departure request targets the Worker and encodes the stop id', () => {
   assert.equal(CONFIG.apiBaseUrl, 'https://pid-ar-api.wondrej-blogspot.workers.dev');
@@ -15,4 +16,19 @@ test('four metro stop IDs produce exactly the stops parameter, never stop', () =
   assert.equal(url.search, '?stops=U400Z101P%2CU400Z102P%2CU400Z121P%2CU400Z122P');
   assert.equal(url.searchParams.get('stops'), ids.join(','));
   assert.equal(url.searchParams.has('stop'), false);
+});
+
+test('departure time class reflects only reliable realtime delay state', () => {
+  const cases = [
+    [{ realtime:false, delaySeconds:0 }, 'time'],
+    [{ realtime:true, delaySeconds:0 }, 'time realtime-on-time'],
+    [{ realtime:true, delaySeconds:45 }, 'time realtime-on-time'],
+    [{ realtime:true, delaySeconds:60 }, 'time realtime-on-time'],
+    [{ realtime:true, delaySeconds:61 }, 'time realtime-delayed'],
+    [{ realtime:true, delaySeconds:null }, 'time'],
+  ];
+
+  for (const [departure, expected] of cases) {
+    assert.equal(departureTimeClass(departure), expected);
+  }
 });
