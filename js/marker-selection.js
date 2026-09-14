@@ -8,3 +8,7 @@
 export function aimMarker(state, stop) {
   state.aimed = stop;
 }
+
+export function isSelectedNearby(selected, nearby) {
+  return !selected || nearby.some(stop => stop.id === selected.id);
+}

@@ -1,0 +1,24 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { PositionStabilizer } from '../js/position-stabilizer.js';
+import { LocationTracking } from '../js/location-tracking.js';
+import { buildGrid, nearbyFromGrid } from '../js/geo.js';
+import { isSelectedNearby } from '../js/marker-selection.js';
+import { CONFIG } from '../js/config.js';
+
+const fix=(meters,{accuracy=10,speed=0,timestamp}={})=>({latitude:50+meters/111111,longitude:14,accuracy,speed,timestamp});
+const anchored=(overrides={})=>{let now=1000;const values=[],hard=[];const config={...CONFIG,gpsAnchorMinIntervalMs:0,...overrides};const stabilizer=new PositionStabilizer(config,p=>values.push(p),()=>now,(p,reason)=>hard.push({p,reason}));for(const meters of [0,.5,1])stabilizer.add(fix(meters,{timestamp:now}));return{stabilizer,values,hard,setNow:value=>now=value}};
+
+test('stationary jitter and a 5–10 m walk retain normal filtering',()=>{const {stabilizer,values,setNow}=anchored();const original=values[0];setNow(2000);for(const meters of [2,-2,3])stabilizer.add(fix(meters,{timestamp:2000}));assert.equal(values.length,1);for(const meters of [9.7,9.8,9.9])stabilizer.add(fix(meters,{speed:1,timestamp:2000}));assert.ok(values.at(-1).latitude>original.latitude);assert.ok(values.at(-1).latitude<fix(10).latitude)});
+
+test('vehicle fixes 15–25 m apart follow travel instead of resetting pending',()=>{const {stabilizer,values,setNow}=anchored();for(const [index,meters] of [20,40,65].entries()){setNow(4000+index*3000);stabilizer.add(fix(meters,{speed:8,timestamp:4000+index*3000}))}assert.ok(values.length>=3);assert.ok(values.at(-1).latitude>=fix(64).latitude);assert.equal(stabilizer.diagnostics().movementMode,'moving')});
+
+test('two fresh accurate large fixes hard re-anchor without interpolation',()=>{const {stabilizer,values,hard,setNow}=anchored();setNow(5000);stabilizer.add(fix(180,{timestamp:5000}));assert.equal(hard.length,0);setNow(6000);const destination=fix(200,{timestamp:6000});stabilizer.add(destination);assert.equal(hard[0].reason,'large-displacement');assert.equal(values.at(-1).latitude,destination.latitude)});
+
+test('one inaccurate GPS jump does not hard re-anchor',()=>{const {stabilizer,hard,setNow}=anchored();setNow(5000);stabilizer.add(fix(1000,{accuracy:100,timestamp:5000}));assert.equal(hard.length,0);assert.ok(stabilizer.anchor.latitude<fix(10).latitude)});
+
+test('fresh fix after 60 seconds background immediately re-anchors 2 km away',()=>{const {stabilizer,hard,setNow}=anchored();stabilizer.markAnchorStale();setNow(61000);const destination=fix(2000,{timestamp:61000});assert.equal(stabilizer.add(destination,{resume:true}),'reanchored');assert.equal(stabilizer.anchor.latitude,destination.latitude);assert.equal(hard[0].reason,'resume-after-background')});
+
+test('resume requests uncached position and replaces old watch with exactly one watch',()=>{let now=0,nextWatch=0;const cleared=[],requests=[],watches=[];const geo={getCurrentPosition(success,error,options){requests.push(options)},watchPosition(success,error,options){watches.push(options);return ++nextWatch},clearWatch(id){cleared.push(id)}};const tracking=new LocationTracking({geolocation:geo,config:CONFIG,onFix:()=>{},now:()=>now});tracking.restartLocationTracking();tracking.visibilityChanged(true);now=60000;assert.equal(tracking.visibilityChanged(false),true);assert.equal(requests.at(-1).maximumAge,0);assert.deepEqual(cleared,[1]);assert.equal(watches.length,2);assert.equal(tracking.watchGeneration,2)});
+
+test('hard re-anchor immediately recalculates nearby stops and invalidates selected stop',()=>{const stops=[{id:'old',lat:50,lon:14},{id:'new',lat:50.018,lon:14}],grid=buildGrid(stops,CONFIG.gridCellDegrees);let nearby=[],selected={id:'old'},now=1000;const stabilizer=new PositionStabilizer({...CONFIG,gpsAnchorSampleCount:1,gpsAnchorMinIntervalMs:0},position=>{nearby=nearbyFromGrid(grid,position,CONFIG.nearbyRadiusMeters,CONFIG.gridCellDegrees);if(!isSelectedNearby(selected,nearby))selected=null},()=>now);stabilizer.add(fix(0,{timestamp:now}));assert.equal(nearby[0].id,'old');stabilizer.markAnchorStale();now=61000;stabilizer.add(fix(2000,{timestamp:now}),{resume:true});assert.equal(nearby[0].id,'new');assert.equal(selected,null)});
