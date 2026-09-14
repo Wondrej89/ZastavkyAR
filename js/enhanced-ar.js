@@ -7,6 +7,7 @@ export async function detectEnhancedAR(navigatorObject=globalThis.navigator){
 export function createEnhancedARState(){return{
   available:false,enabled:false,active:false,session:null,referenceSpace:null,
   viewerPose:null,initialPose:null,error:null,domOverlayActive:false,
+  sessionCreated:false,layerCreated:false,poseAvailable:false,
   xrYaw:null,initialXRYaw:null,initialCompassHeading:null,xrHeading:null
 }}
 
@@ -26,30 +27,41 @@ export function alignYawToNorth(initialCompassHeading,currentXRYaw,initialXRYaw)
 
 /** requestSession is called before the first await to preserve user activation. */
 export async function startEnhancedAR({state,navigatorObject=globalThis.navigator,root,
+  documentObject=globalThis.document,XRWebGLLayerClass=globalThis.XRWebGLLayer,
   getCompassHeading=()=>null,onHeading=()=>{},onFrame=()=>{},stopCamera=()=>{},restoreCamera=()=>{}}){
-  let restored=false,ended=false,lastFrameTime=null,northCorrection=0;
-  const restore=()=>{if(restored)return;restored=true;restoreCamera()};
+  let restored=false,ended=false,cameraStopped=false,lastFrameTime=null,northCorrection=0;
+  const restore=()=>{if(restored||!cameraStopped)return;restored=true;restoreCamera()};
   const deactivate=()=>{state.active=false;state.session=null;state.referenceSpace=null;state.viewerPose=null;restore()};
   state.initialPose=null;state.initialXRYaw=null;state.initialCompassHeading=null;
-  state.xrYaw=null;state.xrHeading=null;state.domOverlayActive=false;
-  stopCamera();
+  state.xrYaw=null;state.xrHeading=null;state.domOverlayActive=false;state.sessionCreated=false;
+  state.layerCreated=false;state.poseAvailable=false;
   try{
     const sessionPromise=navigatorObject.xr.requestSession('immersive-ar',{
       optionalFeatures:['dom-overlay','local-floor'],domOverlay:{root}
     });
     const session=await sessionPromise;
-    state.session=session;
+    state.session=session;state.sessionCreated=true;
     session.addEventListener('end',()=>{ended=true;state.domOverlayActive=false;deactivate()},{once:true});
     if(!session.domOverlayState){state.error=new Error('DOM Overlay není dostupný');await session.end();throw state.error}
     state.domOverlayActive=true;
+    const canvas=documentObject.createElement('canvas');
+    const gl=canvas.getContext('webgl',{xrCompatible:true,alpha:true,antialias:false});
+    if(!gl)throw new Error('WebGL context pro WebXR není dostupný');
+    if(typeof gl.makeXRCompatible==='function')await gl.makeXRCompatible();
+    if(typeof XRWebGLLayerClass!=='function')throw new Error('XRWebGLLayer není dostupný');
+    const layer=new XRWebGLLayerClass(session,gl,{alpha:true,depth:false,stencil:false,antialias:false});
+    session.updateRenderState({baseLayer:layer});state.layerCreated=true;
     state.referenceSpace=await session.requestReferenceSpace('local');
+    stopCamera();cameraStopped=true;
     state.active=true;state.error=null;
     const onXRFrame=(time,frame)=>{
       if(!state.active)return;
       session.requestAnimationFrame(onXRFrame);
+      gl.bindFramebuffer(gl.FRAMEBUFFER,session.renderState.baseLayer.framebuffer);
+      gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT);
       const pose=frame.getViewerPose(state.referenceSpace);
       if(!pose)return;
-      state.viewerPose=pose;
+      state.viewerPose=pose;state.poseAvailable=true;
       const transform=pose.transform??pose.views?.[0]?.transform;
       if(!transform?.orientation)return;
       const yaw=quaternionToYaw(transform.orientation);state.xrYaw=yaw;
