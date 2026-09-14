@@ -8,7 +8,6 @@ export const CONFIG = Object.freeze({
   gridCellDegrees: 0.005,
   horizontalFovDeg: 60,
   selectionAngleDeg: 8,
-  selectionDwellMs: 800,
   selectionLockMs: 1400,
   realtimeRefreshMs: 20000,
   nightServiceStartHour: 23.5,
