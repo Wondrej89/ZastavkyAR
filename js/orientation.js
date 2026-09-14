@@ -1,78 +1,41 @@
-const wrappedDelta = (target, current) => ((target-current+540)%360)-180;
-const normalize = value => (value%360+360)%360;
+const wrappedDelta=(target,current)=>((target-current+540)%360)-180;
+const normalize=value=>(value%360+360)%360;
+export function circularMean(values){if(!values.length)return null;const sum=values.reduce((o,v)=>({x:o.x+Math.cos(v*Math.PI/180),y:o.y+Math.sin(v*Math.PI/180)}),{x:0,y:0});return normalize(Math.atan2(sum.y,sum.x)*180/Math.PI)}
 
-export function circularMean(values) {
-  if (!values.length) return null;
-  const sum=values.reduce((out,value)=>({x:out.x+Math.cos(value*Math.PI/180),y:out.y+Math.sin(value*Math.PI/180)}),{x:0,y:0});
-  return normalize(Math.atan2(sum.y,sum.x)*180/Math.PI);
-}
-
-/**
- * Keeps fast phone rotation independent from the noisy magnetic north reading.
- * The compass establishes north once, then only removes long-term relative-sensor
- * drift. DeviceOrientation is the best broadly available fallback until the
- * experimental WebXR path is enabled.
- */
-export class OrientationController {
-  constructor(onHeading,onWarning=()=>{},config={},now=()=>Date.now()) {
-    this.onHeading=onHeading;this.onWarning=onWarning;this.now=now;
-    this.config={headingPublishIntervalMs:100,headingBufferSize:10,headingStabilizationMs:1000,headingInitializationSpreadDeg:8,headingDeadbandDeg:2.5,compassCorrectionAlpha:.025,compassCorrectionMaxDegPerSecond:3,compassMaxErrorDeg:45,orientationStartupFallbackMs:2000,...config};
-    this.heading=null;this.relativeHeading=null;this.compassHeading=null;this.compassCorrection=0;this.initializationStartedAt=null;this.lastPublishedAt=-Infinity;this.lastFusionAt=null;this.lastRelativeRaw=null;this.compassSamples=[];this.relativeCandidate=null;this.hasRelativeEvents=false;this.spreadWarningShown=false;this.relativeWarningShown=false;this.accuracyWarningShown=false;this.handler=this.handle.bind(this);
-  }
-  start() {
-    if (typeof DeviceOrientationEvent === 'undefined') throw new Error('Orientace není podporována');
-    this.initializationStartedAt=this.now();
-    window.addEventListener('deviceorientationabsolute',this.handler,true);
-    window.addEventListener('deviceorientation',this.handler,true);
-  }
-  handle(event) {
-    const now=this.now(),ios=Number.isFinite(event.webkitCompassHeading),absolute=ios||event.absolute===true||event.type==='deviceorientationabsolute';
-    if(this.initializationStartedAt===null)this.initializationStartedAt=now;
-    const inaccurateIosCompass=ios&&Number.isFinite(event.webkitCompassAccuracy)&&event.webkitCompassAccuracy>this.config.compassMaxErrorDeg;
-    if(inaccurateIosCompass&&!this.accuracyWarningShown){this.accuracyWarningShown=true;this.onWarning('Kompas potřebuje kalibraci.')}
-    const rawRelative=this.eventHeading(event);
-    if(!absolute)this.hasRelativeEvents=true;
-    // Once genuine relative events arrive, absolute events only feed correction.
-    const useForMotion=Number.isFinite(rawRelative)&&(ios||!this.hasRelativeEvents||!absolute);
-    // iOS's webkit value is the absolute north reference; alpha remains useful
-    // as the fast relative rotation sensor, even when compass accuracy is poor.
-    const compass=absolute&&!inaccurateIosCompass?(ios?normalize(event.webkitCompassHeading+this.screenAngle()):rawRelative):null;
-    if(Number.isFinite(compass))this.addCompassSample(compass,now);
-    if(this.heading===null&&Number.isFinite(rawRelative)){this.relativeCandidate={heading:rawRelative,time:now};this.initializeRelativeFallback(now)}
-    if(this.heading!==null&&useForMotion)this.integrateRelative(rawRelative,now);
-    if(this.heading!==null&&Number.isFinite(this.compassHeading))this.correctCompass(now);
-    this.publish(now);
-  }
-  eventHeading(event){if(!Number.isFinite(event.alpha))return null;return normalize(360-event.alpha+this.screenAngle())}
-  screenAngle(){return Number(globalThis.screen?.orientation?.angle??globalThis.orientation??0)||0}
-  addCompassSample(value,now){
-    this.compassSamples.push({value,time:now});this.compassSamples=this.compassSamples.slice(-this.config.headingBufferSize);
-    this.compassHeading=circularMean(this.compassSamples.map(sample=>sample.value));
-    if(this.heading!==null||this.compassSamples.length<3||now-this.initializationStartedAt<this.config.headingStabilizationMs)return;
-    const spread=Math.max(...this.compassSamples.map(sample=>Math.abs(wrappedDelta(sample.value,this.compassHeading))));
-    if(spread>this.config.headingInitializationSpreadDeg&&!this.spreadWarningShown){this.spreadWarningShown=true;this.onWarning('Kompas je méně přesný, zkuste telefon krátce pohnout do tvaru osmičky.')}
-    this.heading=this.compassHeading;this.relativeHeading=this.heading;this.lastRelativeRaw=null;this.lastFusionAt=now;
-  }
-  initializeRelativeFallback(now){
-    // Some browsers expose no absolute event. Preserve the standard sensor mode
-    // after the normal wait, while reporting that no compass correction exists.
-    if(this.initializationStartedAt===null)this.initializationStartedAt=now;
-    if(now-this.initializationStartedAt<this.config.orientationStartupFallbackMs)return;
-    this.heading=this.relativeCandidate.heading;this.relativeHeading=this.heading;this.lastRelativeRaw=this.relativeCandidate.heading;this.lastFusionAt=now;
-    if(!this.relativeWarningShown){this.relativeWarningShown=true;this.onWarning('Směr není přesně zkalibrován.')}
-  }
-  integrateRelative(raw,now){
-    if(this.lastRelativeRaw!==null){const delta=wrappedDelta(raw,this.lastRelativeRaw);this.relativeHeading=normalize(this.relativeHeading+delta);this.heading=normalize(this.heading+delta)}
-    this.lastRelativeRaw=raw;if(this.lastFusionAt===null)this.lastFusionAt=now;
-  }
-  correctCompass(now){
-    const elapsed=Math.max(0,(now-(this.lastFusionAt??now))/1000);this.lastFusionAt=now;
-    const error=wrappedDelta(this.compassHeading,this.heading);
-    if(Math.abs(error)<=this.config.headingDeadbandDeg){this.compassCorrection=0;return}
-    const wanted=error*this.config.compassCorrectionAlpha,maxStep=this.config.compassCorrectionMaxDegPerSecond*elapsed;
-    this.compassCorrection=Math.sign(wanted)*Math.min(Math.abs(wanted),maxStep);this.heading=normalize(this.heading+this.compassCorrection);
-  }
-  publish(now){if(this.heading===null||now-this.lastPublishedAt<this.config.headingPublishIntervalMs)return;this.lastPublishedAt=now;this.onHeading(this.heading,this.debugState())}
-  debugState(){return{compassHeading:this.compassHeading,relativeHeading:this.relativeHeading,fusedHeading:this.heading,compassCorrection:this.compassCorrection}}
-  stop(){window.removeEventListener('deviceorientationabsolute',this.handler,true);window.removeEventListener('deviceorientation',this.handler,true)}
+/** Collects relative motion and a separately verified absolute-north reference. */
+export class OrientationController{
+ constructor(onHeading,onWarning=()=>{},config={},now=()=>Date.now(),environment={}){
+  this.onHeading=onHeading;this.onWarning=onWarning;this.now=now;this.env=environment;
+  this.config={headingPublishIntervalMs:100,headingBufferSize:10,headingStabilizationMs:1000,headingInitializationSpreadDeg:8,headingDeadbandDeg:2.5,compassCorrectionAlpha:.025,compassCorrectionMaxDegPerSecond:3,compassMaxErrorDeg:45,orientationSensorTimeoutMs:3000,...config};
+  this.heading=null;this.relativeHeading=null;this.compassHeading=null;this.compassCorrection=0;this.initializationStartedAt=null;this.lastPublishedAt=-Infinity;this.lastFusionAt=null;this.lastRelativeRaw=null;this.compassSamples=[];this.hasRelativeEvents=false;this.spreadWarningShown=false;this.accuracyWarningShown=false;
+  this.sensorState='idle';this.dataStatus='waiting';this.orientationSource='none';this.eventReceived=0;this.absoluteEventReceived=0;this.validAlphaReceived=0;this.absoluteTrueEvents=0;this.lastAlpha=null;this.lastBeta=null;this.lastGamma=null;this.absoluteSensorRunning=false;this.absoluteSensorError=null;this.sensorPermissions={accelerometer:'unknown',gyroscope:'unknown',magnetometer:'unknown'};this.handler=this.handle.bind(this);
+ }
+ start(){
+  const DOE=this.env.DeviceOrientationEvent??globalThis.DeviceOrientationEvent;if(typeof DOE==='undefined')throw new Error('Orientace není podporována');
+  this.stop();this.sensorState='starting';this.dataStatus='waiting';this.initializationStartedAt=this.now();const win=this.env.window??globalThis.window;
+  win.addEventListener('deviceorientationabsolute',this.handler,true);win.addEventListener('deviceorientation',this.handler,true);this.sensorState='waiting-for-events';
+  this.startAbsoluteSensor();this.timeout=setTimeout(()=>this.finishWaiting(),this.config.orientationSensorTimeoutMs);return this;
+ }
+ finishWaiting(){if(this.sensorState==='absolute-ready')return;if(!this.eventReceived){this.sensorState='unavailable';this.dataStatus='unavailable';this.onWarning('Pohybové senzory nejsou dostupné.\n\nV Chrome otevřete:\nNastavení → Nastavení webů → Pohybové senzory\na povolte jejich používání.')}else if(!this.validAlphaReceived){this.sensorState='unavailable';this.dataStatus='unavailable';this.onWarning('Data orientace telefonu nejsou dostupná.')}else{this.sensorState='relative-only';this.dataStatus='relative';this.onWarning('Nepodařilo se určit sever.')}this.publish(this.now(),true)}
+ handle(event){
+  const now=this.now(),ios=Number.isFinite(event.webkitCompassHeading),absolute=ios||event.absolute===true||event.type==='deviceorientationabsolute';
+  this.eventReceived++;if(event.type==='deviceorientationabsolute')this.absoluteEventReceived++;if(event.absolute===true)this.absoluteTrueEvents++;
+  this.lastAlpha=Number.isFinite(event.alpha)?event.alpha:null;this.lastBeta=Number.isFinite(event.beta)?event.beta:null;this.lastGamma=Number.isFinite(event.gamma)?event.gamma:null;
+  const raw=this.eventHeading(event);if(Number.isFinite(raw))this.validAlphaReceived++;if(!absolute&&Number.isFinite(raw)){this.hasRelativeEvents=true;this.relativeHeading??=raw;if(this.sensorState!=='absolute-ready'){this.sensorState='relative-only';this.dataStatus='relative';this.orientationSource='deviceorientation-relative';if(this.heading===null&&now-this.initializationStartedAt>=(this.config.orientationStartupFallbackMs??2000)){this.heading=raw;this.lastRelativeRaw=raw;if(!this.relativeWarningShown){this.relativeWarningShown=true;this.onWarning('Směr není přesně zkalibrován.')}}}}
+  const inaccurate=ios&&Number.isFinite(event.webkitCompassAccuracy)&&event.webkitCompassAccuracy>this.config.compassMaxErrorDeg;if(inaccurate&&!this.accuracyWarningShown){this.accuracyWarningShown=true;this.onWarning('Kompas potřebuje kalibraci.')}
+  const compass=absolute&&!inaccurate?(ios?normalize(event.webkitCompassHeading+this.screenAngle()):raw):null;if(Number.isFinite(compass))this.addCompassSample(compass,now,ios?'deviceorientationabsolute':'deviceorientationabsolute');
+  if(this.heading!==null&&Number.isFinite(raw)&&(!absolute||ios))this.integrateRelative(raw,now);if(this.heading!==null&&Number.isFinite(this.compassHeading))this.correctCompass(now);this.publish(now);
+ }
+ eventHeading(e){return Number.isFinite(e.alpha)?normalize(360-e.alpha+this.screenAngle()):null} screenAngle(){return Number(globalThis.screen?.orientation?.angle??globalThis.orientation??0)||0}
+ addCompassSample(value,now,source){this.compassSamples.push({value,time:now});this.compassSamples=this.compassSamples.slice(-this.config.headingBufferSize);this.compassHeading=circularMean(this.compassSamples.map(s=>s.value));if(this.compassSamples.length<3||now-this.initializationStartedAt<this.config.headingStabilizationMs)return;const spread=Math.max(...this.compassSamples.map(s=>Math.abs(wrappedDelta(s.value,this.compassHeading))));if(spread>this.config.headingInitializationSpreadDeg&&!this.spreadWarningShown){this.spreadWarningShown=true;this.onWarning('Kompas je méně přesný, zkuste telefon krátce pohnout do tvaru osmičky.')}if(this.heading===null){this.heading=this.compassHeading;this.relativeHeading??=this.heading;this.lastRelativeRaw??=this.heading;this.lastFusionAt=now}this.sensorState='absolute-ready';this.dataStatus='absolute';this.orientationSource=source;clearTimeout(this.timeout)}
+ async startAbsoluteSensor(){
+  const Sensor=this.env.AbsoluteOrientationSensor??globalThis.AbsoluteOrientationSensor;if(typeof Sensor!=='function')return;const nav=this.env.navigator??globalThis.navigator;
+  for(const name of Object.keys(this.sensorPermissions)){try{this.sensorPermissions[name]=(await nav?.permissions?.query?.({name}))?.state??'unsupported'}catch(_){this.sensorPermissions[name]='unsupported'}}
+  try{const sensor=new Sensor({frequency:20,referenceFrame:'device'});this.absoluteSensor=sensor;sensor.addEventListener('reading',()=>{this.absoluteSensorRunning=true;const q=sensor.quaternion;if(!q)return;const yaw=normalize(-Math.atan2(2*(q[3]*q[1]+q[0]*q[2]),1-2*(q[1]*q[1]+q[2]*q[2]))*180/Math.PI);this.addCompassSample(yaw,this.now(),'absolute-orientation-sensor');this.publish(this.now())});sensor.addEventListener('error',e=>{this.absoluteSensorRunning=false;this.absoluteSensorError=e.error??e; if(this.sensorState!=='absolute-ready'&&this.absoluteSensorError?.name!=='NotAllowedError'){this.dataStatus='unavailable'}});sensor.start();this.absoluteSensorRunning=true}catch(e){this.absoluteSensorError=e;this.absoluteSensorRunning=false;if(e.name!=='NotAllowedError')this.dataStatus='unavailable'}
+ }
+ integrateRelative(raw,now){if(this.lastRelativeRaw!==null){const d=wrappedDelta(raw,this.lastRelativeRaw);this.relativeHeading=normalize((this.relativeHeading??this.heading)+d);this.heading=normalize(this.heading+d)}this.lastRelativeRaw=raw;this.lastFusionAt??=now}
+ correctCompass(now){const elapsed=Math.max(0,(now-(this.lastFusionAt??now))/1000);this.lastFusionAt=now;const error=wrappedDelta(this.compassHeading,this.heading);if(Math.abs(error)<=this.config.headingDeadbandDeg){this.compassCorrection=0;return}const wanted=error*this.config.compassCorrectionAlpha,max=this.config.compassCorrectionMaxDegPerSecond*elapsed;this.compassCorrection=Math.sign(wanted)*Math.min(Math.abs(wanted),max);this.heading=normalize(this.heading+this.compassCorrection)}
+ publish(now,force=false){if(!force&&(this.heading===null||now-this.lastPublishedAt<this.config.headingPublishIntervalMs))return;this.lastPublishedAt=now;if(this.heading!==null)this.onHeading(this.heading,this.debugState());else this.onHeading(null,this.debugState())}
+ debugState(){return{eventReceived:this.eventReceived,validAlphaReceived:this.validAlphaReceived,absoluteEventReceived:this.absoluteEventReceived,absoluteHeadingAvailable:Number.isFinite(this.compassHeading),relativeHeadingAvailable:Number.isFinite(this.relativeHeading),deviceOrientationEvents:this.eventReceived-this.absoluteEventReceived,deviceOrientationAbsoluteEvents:this.absoluteEventReceived,finiteAlphaEvents:this.validAlphaReceived,absoluteTrueEvents:this.absoluteTrueEvents,alpha:this.lastAlpha,beta:this.lastBeta,gamma:this.lastGamma,compassHeading:this.compassHeading,relativeHeading:this.relativeHeading,fusedHeading:this.heading,compassCorrection:this.compassCorrection,sensorState:this.sensorState,orientationDataStatus:this.dataStatus,orientationSource:this.orientationSource,absoluteOrientationSensorSupported:typeof (this.env.AbsoluteOrientationSensor??globalThis.AbsoluteOrientationSensor)==='function',absoluteOrientationSensorRunning:this.absoluteSensorRunning,absoluteOrientationSensorError:this.absoluteSensorError,sensorPermissions:this.sensorPermissions}}
+ stop(){clearTimeout(this.timeout);const win=this.env.window??globalThis.window;win?.removeEventListener?.('deviceorientationabsolute',this.handler,true);win?.removeEventListener?.('deviceorientation',this.handler,true);try{this.absoluteSensor?.stop()}catch(_){}this.absoluteSensorRunning=false}
 }

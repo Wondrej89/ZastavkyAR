@@ -44,3 +44,8 @@ test('permission panel lists the state of every individual permission',()=>{
  assert.deepEqual(children.map(item=>item.textContent),['✓ Kamera','✕ Poloha','✕ Pohybové senzory']);assert.equal(panel.hidden,false);assert.match(summary.textContent,/směr telefonu/);
  globalThis.document=oldDocument;
 });
+
+test('camera runtime failure is error rather than denied',async()=>{
+ const failure=Object.assign(new Error('camera busy'),{name:'NotReadableError'});const {controller}=make({startCamera:()=>Promise.reject(failure)});
+ await controller.recover();assert.equal(controller.states.camera,'error');assert.equal(controller.cameraDiagnostics.errorName,'NotReadableError');assert.equal(controller.cameraDiagnostics.getUserMediaAttempted,true);
+});
