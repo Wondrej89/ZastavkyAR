@@ -43,3 +43,14 @@ test('available sensor samples cannot leave heading permanently null',()=>{
   assert.notEqual(controller.heading,null);
   assert.equal(controller.compassSamples.length,10);
 });
+
+test('no events time out as unavailable without false absolute readiness',()=>{
+ let now=0,last;const controller=new OrientationController((_,details)=>{last=details},()=>{},{orientationSensorTimeoutMs:1},()=>now);
+ controller.sensorState='waiting-for-events';controller.finishWaiting();assert.equal(last.orientationDataStatus,'unavailable');assert.equal(last.absoluteHeadingAvailable,false);
+});
+
+test('absolute orientation sensor fallback supplies verified absolute heading',()=>{
+ let now=10;const controller=new OrientationController(()=>{},()=>{},{headingStabilizationMs:0,headingBufferSize:3},()=>now);
+ controller.initializationStartedAt=0;for(let i=0;i<3;i++)controller.addCompassSample(90,now++,'absolute-orientation-sensor');
+ assert.equal(controller.sensorState,'absolute-ready');assert.equal(controller.orientationSource,'absolute-orientation-sensor');
+});

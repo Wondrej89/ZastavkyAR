@@ -42,5 +42,6 @@ export const CONFIG = Object.freeze({
   compassCorrectionMaxDegPerSecond: 3,
   compassMaxErrorDeg: 45,
   orientationStartupFallbackMs: 2000,
+  orientationSensorTimeoutMs: 3000,
   debugPosition: { latitude: 50.0715, longitude: 14.4039, accuracy: 8 }
 });

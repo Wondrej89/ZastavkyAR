@@ -15,7 +15,7 @@ export class PermissionPanelView{
  render(states){
   const missing=Object.entries(states).filter(([,value])=>value!=='granted');
   this.panel.classList.toggle('hidden',missing.length===0);
-  this.summary.textContent=states.camera!=='granted'?'Nemohu spustit kameru.\nKlepněte pro povolení přístupu.':states.orientation!=='granted'?'Nemohu určit směr telefonu.\nKlepněte pro povolení pohybových senzorů.':'Potřebuji ještě jedno oprávnění';
+  this.summary.textContent=states.camera==='error'?'Kameru se nepodařilo spustit.\nMůže ji používat jiná funkce nebo aplikace.':states.camera!=='granted'?'Nemohu spustit kameru.\nKlepněte pro povolení přístupu.':states.orientation!=='granted'?'Nemohu určit směr telefonu.\nKlepněte pro povolení pohybových senzorů.':'Potřebuji ještě jedno oprávnění';
   const labels={camera:'Kamera',location:'Poloha',orientation:'Pohybové senzory'};
   this.list.replaceChildren(...Object.entries(states).map(([name,value])=>{const li=document.createElement('li');li.className=`permission-${value}`;li.textContent=`${value==='granted'?'✓':'✕'} ${labels[name]}`;return li;}));
  }
@@ -31,7 +31,7 @@ export class PermissionPanelView{
  * protected API is invoked in the original click stack before any await. */
 export class PermissionController{
  constructor({view,navigator:nav=globalThis.navigator,window:win=globalThis.window,orientationEvent=globalThis.DeviceOrientationEvent,motionEvent=globalThis.DeviceMotionEvent,startCamera,startLocation,startOrientation,onChange=()=>{}}){
-  this.view=view;this.nav=nav;this.win=win;this.orientationEvent=orientationEvent;this.motionEvent=motionEvent;this.startCamera=startCamera;this.startLocation=startLocation;this.startOrientation=startOrientation;this.onChange=onChange;this.platform=platformKind(nav,win);this.states={...UNKNOWN_PERMISSIONS};this.orientationController=null;this.view.bind(()=>this.recover());this.render();
+  this.view=view;this.nav=nav;this.win=win;this.orientationEvent=orientationEvent;this.motionEvent=motionEvent;this.startCamera=startCamera;this.startLocation=startLocation;this.startOrientation=startOrientation;this.onChange=onChange;this.platform=platformKind(nav,win);this.states={...UNKNOWN_PERMISSIONS};this.orientationController=null;this.cameraDiagnostics={getUserMediaAttempted:false,errorName:null,errorMessage:null};this.view.bind(()=>this.recover());this.render();
  }
  set(name,value){if(this.states[name]===value)return;this.states={...this.states,[name]:value};this.render();}
  render(){this.view.render(this.states);this.onChange(this.states);}
@@ -50,7 +50,7 @@ export class PermissionController{
   if(this.states.orientation==='granted'||(this.states.orientation==='denied'&&this.platform==='ios'))return {skip:true};
   if(!this.orientationEvent)return {unsupported:true};
   try{
-   const orientation=typeof this.orientationEvent.requestPermission==='function'?this.orientationEvent.requestPermission():Promise.resolve('granted');
+   let orientation;if(typeof this.orientationEvent.requestPermission==='function'){try{orientation=this.platform==='android'?this.orientationEvent.requestPermission(true):this.orientationEvent.requestPermission()}catch(_){orientation=this.orientationEvent.requestPermission()}}else orientation=Promise.resolve('granted');
    const motion=typeof this.motionEvent?.requestPermission==='function'?this.motionEvent.requestPermission():Promise.resolve('granted');
    return {promise:Promise.all([orientation,motion])};
   }catch(error){return {promise:Promise.reject(error)}}
@@ -60,7 +60,7 @@ export class PermissionController{
   if(request.unsupported){this.set('orientation','unsupported');return}
   try{const results=await request.promise;if(results.every(value=>value==='granted')){this.set('orientation','granted');this.orientationController?.stop?.();this.orientationController=await this.startOrientation();}else this.set('orientation','denied');}catch(error){this.set('orientation',deniedError(error)?'denied':'unsupported')}
  }
- async finish(name,promise){if(!promise)return;try{await promise;this.set(name,'granted')}catch(error){this.set(name,deniedError(error)?'denied':'denied')}}
+ async finish(name,promise){if(!promise)return;if(name==='camera')this.cameraDiagnostics.getUserMediaAttempted=true;try{await promise;if(name==='camera'){this.cameraDiagnostics.errorName=null;this.cameraDiagnostics.errorMessage=null}this.set(name,'granted')}catch(error){if(name==='camera'){this.cameraDiagnostics.errorName=error?.name||'Error';this.cameraDiagnostics.errorMessage=error?.message||String(error)}this.set(name,deniedError(error)?'denied':'error')}}
  isStandalone(){return this.win?.matchMedia?.('(display-mode: standalone)').matches===true||this.nav?.standalone===true}
  async check(){
   const permissions=this.nav?.permissions;if(!permissions?.query)return this.states;
