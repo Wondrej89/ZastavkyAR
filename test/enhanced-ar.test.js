@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { alignYawToNorth, createEnhancedARState, detectEnhancedAR, quaternionToYaw, startEnhancedAR } from '../js/enhanced-ar.js';
+import { alignYawToNorth, createEnhancedARState, detectEnhancedAR, quaternionToYaw, setupEnhancedARRecovery, startEnhancedAR } from '../js/enhanced-ar.js';
 
 test('detects immersive-ar without starting an XR session',async()=>{
   let requested;
   const available=await detectEnhancedAR({xr:{isSessionSupported:async mode=>{requested=mode;return true}}});
   assert.equal(requested,'immersive-ar');assert.equal(available,true);
-  assert.deepEqual(createEnhancedARState(),{available:false,enabled:false,active:false,session:null,referenceSpace:null,viewerPose:null,initialPose:null,error:null,domOverlayActive:false,sessionCreated:false,layerCreated:false,poseAvailable:false,xrYaw:null,initialXRYaw:null,initialCompassHeading:null,xrHeading:null});
+  assert.deepEqual(createEnhancedARState(),{available:false,enabled:false,active:false,session:null,referenceSpace:null,viewerPose:null,initialPose:null,error:null,domOverlayActive:false,sessionCreated:false,layerCreated:false,poseAvailable:false,xrYaw:null,initialXRYaw:null,initialCompassHeading:null,xrHeading:null,visibilityState:null,interrupted:false,ending:false,lastXRFrameAt:null,interrupt:null});
 });
 
 test('converts WebXR quaternion to clockwise camera yaw',()=>{
@@ -61,4 +61,38 @@ test('layer setup failure ends the session without stopping a running camera',as
 test('unsupported WebXR remains on standard sensor path',async()=>{
   assert.equal(await detectEnhancedAR({}),false);
   assert.equal(await detectEnhancedAR({xr:{isSessionSupported:async()=>{throw new Error('blocked')}}}),false);
+});
+
+
+test('XR visible to hidden ends once, restores camera, and retires the old RAF',async()=>{
+  const listeners={},frames=[];let ended=0,restored=0,headings=0;
+  const gl={FRAMEBUFFER:1,COLOR_BUFFER_BIT:2,bindFramebuffer(){},clearColor(){},clear(){}};
+  const session={visibilityState:'visible',domOverlayState:{type:'screen'},renderState:{},addEventListener(name,fn){listeners[name]=fn},updateRenderState(value){this.renderState=value},requestReferenceSpace:async()=>({}),requestAnimationFrame(fn){frames.push(fn)},async end(){ended++;listeners.end?.()}};
+  const state=createEnhancedARState();
+  assert.equal(await startEnhancedAR({state,root:{},navigatorObject:{xr:{requestSession:async()=>session}},documentObject:{createElement:()=>({getContext:()=>gl})},XRWebGLLayerClass:class{constructor(){return{framebuffer:{}}}},getCompassHeading:()=>10,onHeading:()=>headings++,stopCamera:()=>{},restoreCamera:()=>restored++}),true);
+  assert.equal(state.visibilityState,'visible');
+  const staleFrame=frames[0];
+  session.visibilityState='visible-blurred';listeners.visibilitychange();
+  assert.equal(ended,0);assert.equal(state.visibilityState,'visible-blurred');
+  session.visibilityState='hidden';listeners.visibilitychange();listeners.visibilitychange();
+  await Promise.resolve();
+  assert.equal(ended,1);assert.equal(restored,1);assert.equal(state.interrupted,true);assert.equal(state.active,false);assert.equal(state.session,null);
+  staleFrame(12,{getViewerPose:()=>({transform:{orientation:{x:0,y:0,z:0,w:1}}})});
+  assert.equal(headings,0);assert.equal(frames.length,1);
+});
+
+test('document lifecycle wiring restores the fallback after background',async()=>{
+  const source=await import('node:fs/promises').then(fs=>fs.readFile(new URL('../js/app.js',import.meta.url),'utf8'));
+  assert.match(source,/document\.hidden\)\{if\(state\.enhancedAR\.active\).*state\.enhancedAR\.interrupt/);
+  assert.match(source,/if\(!state\.enhancedAR\.active\).*permissions\.handleVisibility\(\)/);
+});
+
+test('recovery panel is enabled-only and its click starts a fresh XR attempt',async()=>{
+  const classes=new Set(['hidden']),panel={classList:{add:value=>classes.add(value),toggle(value,force){force?classes.add(value):classes.delete(value)}}},button={};
+  const state=createEnhancedARState();state.interrupted=true;
+  let sessions=0;
+  const update=setupEnhancedARRecovery({state,panel,button,documentObject:{hidden:false},beginEnhancedAR:async()=>{sessions++;return true}});
+  assert.ok(classes.has('hidden'),'disabled Enhanced AR must not show recovery');
+  state.enabled=true;update();assert.ok(!classes.has('hidden'));
+  await button.onclick();assert.equal(sessions,1);assert.ok(classes.has('hidden'));
 });

@@ -8,7 +8,9 @@ export function createEnhancedARState(){return{
   available:false,enabled:false,active:false,session:null,referenceSpace:null,
   viewerPose:null,initialPose:null,error:null,domOverlayActive:false,
   sessionCreated:false,layerCreated:false,poseAvailable:false,
-  xrYaw:null,initialXRYaw:null,initialCompassHeading:null,xrHeading:null
+  xrYaw:null,initialXRYaw:null,initialCompassHeading:null,xrHeading:null,
+  visibilityState:null,interrupted:false,ending:false,lastXRFrameAt:null,
+  interrupt:null
 }}
 
 export const normalizeDegrees=value=>(value%360+360)%360;
@@ -25,24 +27,51 @@ export function alignYawToNorth(initialCompassHeading,currentXRYaw,initialXRYaw)
   return normalizeDegrees(initialCompassHeading+signedAngleDelta(currentXRYaw,initialXRYaw));
 }
 
+/** Keeps requestSession in the recovery button's user-activation handler. */
+export function setupEnhancedARRecovery({state,panel,button,beginEnhancedAR,documentObject=globalThis.document}){
+  const update=()=>panel.classList.toggle('hidden',documentObject.hidden||!state.interrupted||!state.enabled);
+  button.onclick=()=>beginEnhancedAR().then(active=>{if(active)panel.classList.add('hidden');return active});
+  update();return update;
+}
+
 /** requestSession is called before the first await to preserve user activation. */
 export async function startEnhancedAR({state,navigatorObject=globalThis.navigator,root,
   documentObject=globalThis.document,XRWebGLLayerClass=globalThis.XRWebGLLayer,
-  getCompassHeading=()=>null,onHeading=()=>{},onFrame=()=>{},stopCamera=()=>{},restoreCamera=()=>{}}){
-  let restored=false,ended=false,cameraStopped=false,lastFrameTime=null,northCorrection=0;
+  getCompassHeading=()=>null,onHeading=()=>{},onFrame=()=>{},onDeactivate=()=>{},stopCamera=()=>{},restoreCamera=()=>{}}){
+  let restored=false,ended=false,endRequested=false,cameraStopped=false,lastFrameTime=null,northCorrection=0;
   const restore=()=>{if(restored||!cameraStopped)return;restored=true;restoreCamera()};
-  const deactivate=()=>{state.active=false;state.session=null;state.referenceSpace=null;state.viewerPose=null;restore()};
+  let session;
+  const deactivate=()=>{
+    if(state.session!==session)return;
+    state.active=false;state.session=null;state.referenceSpace=null;state.viewerPose=null;
+    state.domOverlayActive=false;state.ending=false;state.interrupt=null;restore();onDeactivate();
+  };
+  const endSession=async(interrupted=false)=>{
+    if(interrupted)state.interrupted=true;
+    if(endRequested||ended||state.session!==session)return;
+    endRequested=true;state.ending=true;
+    try{await session.end()}catch(_){/* The end event is not guaranteed after an error. */}
+    finally{deactivate()}
+  };
   state.initialPose=null;state.initialXRYaw=null;state.initialCompassHeading=null;
   state.xrYaw=null;state.xrHeading=null;state.domOverlayActive=false;state.sessionCreated=false;
-  state.layerCreated=false;state.poseAvailable=false;
+  state.layerCreated=false;state.poseAvailable=false;state.visibilityState=null;
+  state.interrupted=false;state.ending=false;state.lastXRFrameAt=null;state.interrupt=null;
   try{
     const sessionPromise=navigatorObject.xr.requestSession('immersive-ar',{
       optionalFeatures:['dom-overlay','local-floor'],domOverlay:{root}
     });
-    const session=await sessionPromise;
+    session=await sessionPromise;
     state.session=session;state.sessionCreated=true;
-    session.addEventListener('end',()=>{ended=true;state.domOverlayActive=false;deactivate()},{once:true});
-    if(!session.domOverlayState){state.error=new Error('DOM Overlay není dostupný');await session.end();throw state.error}
+    state.visibilityState=session.visibilityState??null;
+    state.interrupt=()=>endSession(true);
+    session.addEventListener('end',()=>{ended=true;deactivate()},{once:true});
+    session.addEventListener('visibilitychange',()=>{
+      if(state.session!==session)return;
+      state.visibilityState=session.visibilityState;
+      if(session.visibilityState==='hidden')void endSession(true);
+    });
+    if(!session.domOverlayState){state.error=new Error('DOM Overlay není dostupný');await endSession();throw state.error}
     state.domOverlayActive=true;
     const canvas=documentObject.createElement('canvas');
     const gl=canvas.getContext('webgl',{xrCompatible:true,alpha:true,antialias:false});
@@ -55,13 +84,13 @@ export async function startEnhancedAR({state,navigatorObject=globalThis.navigato
     stopCamera();cameraStopped=true;
     state.active=true;state.error=null;
     const onXRFrame=(time,frame)=>{
-      if(!state.active)return;
+      if(!state.active||state.session!==session||state.ending)return;
       session.requestAnimationFrame(onXRFrame);
       gl.bindFramebuffer(gl.FRAMEBUFFER,session.renderState.baseLayer.framebuffer);
       gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT);
       const pose=frame.getViewerPose(state.referenceSpace);
       if(!pose)return;
-      state.viewerPose=pose;state.poseAvailable=true;
+      state.viewerPose=pose;state.poseAvailable=true;state.lastXRFrameAt=Date.now();
       const transform=pose.transform??pose.views?.[0]?.transform;
       if(!transform?.orientation)return;
       const yaw=quaternionToYaw(transform.orientation);state.xrYaw=yaw;
@@ -84,7 +113,7 @@ export async function startEnhancedAR({state,navigatorObject=globalThis.navigato
     return true;
   }catch(error){
     state.error=error;state.domOverlayActive=false;
-    if(!ended&&state.session)try{await state.session.end()}catch(_){}
+    if(!ended&&state.session===session)await endSession();
     deactivate();return false;
   }
 }
