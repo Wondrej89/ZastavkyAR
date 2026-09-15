@@ -8,7 +8,7 @@ export const CONFIG = Object.freeze({
   serviceAreaUrl: './data/pid-service-area.json',
   // Public browser key; restrict the production value in Mapy.com to the
   // wondrej89.github.io referrer and the map-tiles service.
-  mapyApiKey: '',
+  mapyApiKey: '0KomIgyXiUfUMwSa5ecVY9lW8UxyLZ8CdG3YvSvpRZ8',
   mapEnterAngleDeg: 35,
   mapExitAngleDeg: 55,
   mapEnterDwellMs: 300,
