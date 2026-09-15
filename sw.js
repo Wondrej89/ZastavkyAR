@@ -1,6 +1,7 @@
 importScripts('./sw-version.js');
 
-const CACHE = `pid-ar-shell-${self.PID_AR_BUILD_VERSION}`;
+// The asset revision also invalidates development builds whose generated SHA is unchanged.
+const CACHE = `pid-ar-shell-${self.PID_AR_BUILD_VERSION}-maplibre-5.6.2`;
 
 const SHELL = [
   './',
@@ -22,6 +23,7 @@ const SHELL = [
   './js/map-mode.js',
   './js/view-mode-controller.js',
   './js/vendor/maplibre-gl.js',
+  './js/vendor/LICENSE.maplibre-gl',
   './css/vendor/maplibre-gl.css',
   './js/dataset-status.js',
   './js/enhanced-ar.js',
