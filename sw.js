@@ -19,6 +19,10 @@ const SHELL = [
   './js/build-update.js',
   './js/build-version.js',
   './js/config.js',
+  './js/map-mode.js',
+  './js/view-mode-controller.js',
+  './js/vendor/maplibre-gl.js',
+  './css/vendor/maplibre-gl.css',
   './js/dataset-status.js',
   './js/enhanced-ar.js',
   './js/geo.js',
@@ -82,6 +86,9 @@ self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
 
   const url = new URL(event.request.url);
+
+  // Mapy.com TileJSON and raster tiles always use the network and are never cached.
+  if (url.hostname === 'api.mapy.com') return;
 
   if (
     url.pathname.includes('/data/pid-stops') ||

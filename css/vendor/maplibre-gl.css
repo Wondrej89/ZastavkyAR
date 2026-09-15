@@ -1,0 +1,3 @@
+/* Core MapLibre container fallback. The complete release stylesheet may be
+   copied over this file without changing the static application. */
+.maplibregl-map{font:12px/20px system-ui,sans-serif;overflow:hidden;position:relative;-webkit-tap-highlight-color:transparent}.maplibregl-canvas{left:0;position:absolute;top:0}.maplibregl-control-container{position:absolute;inset:0;pointer-events:none}.maplibregl-ctrl-bottom-right{bottom:0;position:absolute;right:0}.maplibregl-ctrl-attrib{background:#fffc;color:#111;padding:0 5px;pointer-events:auto}.maplibregl-ctrl-attrib a{color:inherit}
