@@ -13,7 +13,14 @@ export function markerAriaLabel(marker, showNight=false) {
   const details=isMetro&&marker.lines?.length?`, linky ${joinCzech(marker.lines)}`:marker.platform?`, stanoviště ${marker.platform}`:'';
   return `${type}${showNight?', noční provoz':''} ${marker.name}${details}`;
 }
-export function filterMarkers(markers, enabled) { return markers.filter(marker=>markerModes(marker).some(mode=>enabled.has(mode))); }
+export function filterMarkers(markers, enabled, { date=new Date(), config, showNightStopsDuringDay=true }={}) {
+  const hour=date.getHours()+date.getMinutes()/60;
+  const isNightTime=config && (config.nightServiceStartHour<=config.nightServiceEndHour
+    ? hour>=config.nightServiceStartHour&&hour<config.nightServiceEndHour
+    : hour>=config.nightServiceStartHour||hour<config.nightServiceEndHour);
+  return markers.filter(marker=>markerModes(marker).some(mode=>enabled.has(mode))
+    && (!marker.nightOnly || showNightStopsDuringDay || isNightTime));
+}
 export function deduplicateMetroEntrances(markers) {
   const nearest=new Map();
   for(const marker of markers)if(marker.kind==='metro_entrance'&&marker.stationId&&(!nearest.has(marker.stationId)||marker.distance<nearest.get(marker.stationId).distance))nearest.set(marker.stationId,marker);
