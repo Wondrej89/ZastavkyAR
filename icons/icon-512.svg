@@ -1,6 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="PID AR">
-  <rect width="512" height="512" rx="96" fill="#111827"/>
-  <circle cx="256" cy="256" r="150" fill="none" stroke="#38bdf8" stroke-width="32"/>
-  <path d="M256 72v96M256 344v96M72 256h96M344 256h96" stroke="#fbbf24" stroke-width="32" stroke-linecap="round"/>
-  <circle cx="256" cy="256" r="30" fill="#fff"/>
-</svg>

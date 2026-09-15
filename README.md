@@ -15,7 +15,7 @@ odjezdová tabule ──> Cloudflare Worker ──> Golemio API
 ```
 
 * `index.html`, `styles.css`, `js/` – mobilní UI, senzory, projekce a storage. Desktop se rozhoduje kombinací user-agentu, coarse pointeru, hover capability a viewportu; `?debug=1` režim vynutí mobilní UI a mock polohu (šipky vlevo/vpravo mění heading).
-* `icons/` – všechny ikony jsou textové SVG soubory; repozitář ani výsledný patch nevyžaduje binární obrazové soubory.
+* `icons/` – PNG ikona aplikace a SVG ikony jednotlivých druhů dopravy.
 * `api/departures.js` – jediná frontendová realtime hranice. `apiBaseUrl` se nastavuje pouze v `js/config.js`.
 * `scripts/update-pid-data.mjs` – bez závislostí stáhne a rozbalí GTFS, odvodí módy a vytvoří kompaktní markerový dataset.
 * `worker/` – samostatně nasazovaný Cloudflare Worker; frontend kvůli němu nepřestává být statický.
