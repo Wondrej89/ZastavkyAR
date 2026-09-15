@@ -1,1 +1,17 @@
-{"name":"pid-ar","private":true,"type":"module","scripts":{"test":"node --test","update-data":"node scripts/update-pid-data.mjs","build-service-area":"node scripts/build-service-area.mjs","build-version":"node scripts/create-build-version.mjs"},"engines":{"node":">=20"}}
+{
+  "name": "pid-ar",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "update-data": "node scripts/update-pid-data.mjs",
+    "build-service-area": "node scripts/build-service-area.mjs",
+    "build-version": "node scripts/create-build-version.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "jsqr": "1.4.0"
+  }
+}

@@ -1,5 +1,44 @@
-// Minimal QR encoder for PID AR's short sharing URL (Version 4, EC level L).
-const N=33,D=80,E=20,mul=(x,y)=>{let z=0;while(y){if(y&1)z^=x;y>>=1;x=(x<<1)^((x&128)?285:0)}return z};
-function words(text){const b=new TextEncoder().encode(text);if(b.length>78)throw new RangeError('QR URL is too long');let bits=[],push=(v,n)=>{while(n--)bits.push(v>>n&1)};push(4,4);push(b.length,8);b.forEach(v=>push(v,8));push(0,Math.min(4,D*8-bits.length));while(bits.length%8)bits.push(0);let d=[];for(let i=0;i<bits.length;i+=8)d.push(bits.slice(i,i+8).reduce((a,x)=>a*2+x,0));while(d.length<D)d.push(d.length%2?17:236);let g=[1],p=1;for(let i=0;i<E;i++,p=mul(p,2)){let q=Array(g.length+1).fill(0);g.forEach((v,j)=>{q[j]^=v;q[j+1]^=mul(v,p)});g=q}let r=Array(E).fill(0);d.forEach(v=>{let f=v^r.shift();r.push(0);g.slice(1).forEach((x,i)=>r[i]^=mul(x,f))});return d.concat(r)}
-function matrix(data){let a=Array.from({length:N},()=>Array(N).fill(false)),r=Array.from({length:N},()=>Array(N).fill(false)),set=(y,x,v)=>{if(y>=0&&x>=0&&y<N&&x<N){a[y][x]=v;r[y][x]=true}},finder=(y,x)=>{for(let j=-1;j<8;j++)for(let i=-1;i<8;i++)set(y+j,x+i,i>=0&&i<7&&j>=0&&j<7&&(i===0||i===6||j===0||j===6||(i>1&&i<5&&j>1&&j<5)))};finder(0,0);finder(0,N-7);finder(N-7,0);for(let i=8;i<N-8;i++){set(6,i,i%2===0);set(i,6,i%2===0)}for(let y=-2;y<=2;y++)for(let x=-2;x<=2;x++)set(26+y,26+x,Math.max(Math.abs(x),Math.abs(y))!==1);set(N-8,8,true);for(let i=0;i<9;i++)if(i!==6){set(8,i,0);set(i,8,0)}for(let i=0;i<8;i++){set(8,N-1-i,0);set(N-1-i,8,0)}let bits=data.flatMap(v=>Array.from({length:8},(_,i)=>v>>(7-i)&1)),k=0,up=true;for(let x=N-1;x>0;x-=2){if(x===6)x--;for(let j=0;j<N;j++){let y=up?N-1-j:j;for(let q=0;q<2;q++)if(!r[y][x-q])a[y][x-q]=Boolean((bits[k++]||0)^((y+x-q)%2===0))}up=!up}let f=(8<<10),v=f;for(let i=14;i>=10;i--)if(v>>i&1)v^=1335<<(i-10);f=(f|v)^21522;let A=[[8,0],[8,1],[8,2],[8,3],[8,4],[8,5],[8,7],[8,8],[7,8],[5,8],[4,8],[3,8],[2,8],[1,8],[0,8]],B=[[N-1,8],[N-2,8],[N-3,8],[N-4,8],[N-5,8],[N-6,8],[N-7,8],[8,N-8],[8,N-7],[8,N-6],[8,N-5],[8,N-4],[8,N-3],[8,N-2],[8,N-1]];for(let i=0;i<15;i++){set(...A[i],Boolean(f>>i&1));set(...B[i],Boolean(f>>i&1))}return a}
-export function createQrSvg(text,{size=240}={}){let p=[],q=4,m=matrix(words(text));m.forEach((row,y)=>row.forEach((v,x)=>v&&p.push(`M${x+q} ${y+q}h1v1h-1z`)));let s=document.createElementNS('http://www.w3.org/2000/svg','svg');s.setAttribute('viewBox',`0 0 ${N+8} ${N+8}`);s.setAttribute('width',size);s.setAttribute('height',size);s.setAttribute('role','img');s.setAttribute('aria-label','QR kód s odkazem na PID AR');s.innerHTML=`<rect width="41" height="41" fill="white"/><path d="${p.join('')}" fill="black"/>`;return s}
+import QRCode, { QRErrorCorrectLevel } from './vendor/qrcode-generator.js';
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const QUIET_ZONE = 4;
+
+/** Create a standards-compliant QR code SVG for the supplied text. */
+export function createQrSvg(text, { size = 240 } = {}) {
+  const qr = new QRCode(0, QRErrorCorrectLevel.M);
+  qr.addData(text);
+  qr.make();
+
+  const moduleCount = qr.getModuleCount();
+  const extent = moduleCount + QUIET_ZONE * 2;
+  const modules = [];
+
+  for (let row = 0; row < moduleCount; row += 1) {
+    for (let column = 0; column < moduleCount; column += 1) {
+      if (qr.isDark(row, column)) {
+        modules.push(`M${column + QUIET_ZONE} ${row + QUIET_ZONE}h1v1h-1z`);
+      }
+    }
+  }
+
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${extent} ${extent}`);
+  svg.setAttribute('width', size);
+  svg.setAttribute('height', size);
+  svg.setAttribute('shape-rendering', 'crispEdges');
+  svg.setAttribute('role', 'img');
+  svg.setAttribute('aria-label', 'QR kód s odkazem na PID AR');
+
+  const background = document.createElementNS(SVG_NS, 'rect');
+  background.setAttribute('width', extent);
+  background.setAttribute('height', extent);
+  background.setAttribute('fill', 'white');
+  svg.append(background);
+
+  const foreground = document.createElementNS(SVG_NS, 'path');
+  foreground.setAttribute('d', modules.join(''));
+  foreground.setAttribute('fill', 'black');
+  svg.append(foreground);
+
+  return svg;
+}
