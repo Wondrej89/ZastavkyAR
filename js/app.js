@@ -19,7 +19,7 @@ const savedModes=JSON.parse(localStorage.getItem('pid-ar-modes')||'null');const 
 state.enhancedAR.enabled=localStorage.getItem('pid-ar-enhanced')==='true';
 const camera=new CameraController($('camera'));
 let permissions,locationStabilizer,locationTracking,orientation,enhancedARAttempt=null;
-const mapMode=new MapMode({root:$('map-view'),container:$('map'),error:$('map-error'),compass:$('map-compass'),config:CONFIG,state,select:stop=>select(stop)});
+const mapMode=new MapMode({root:$('map-view'),container:$('map'),error:$('map-error'),compass:$('map-compass'),config:CONFIG,state,debug,select:stop=>select(stop)});
 const modalOpen=()=>!$('board').classList.contains('hidden')||!$('permission-panel').classList.contains('hidden')||[...document.querySelectorAll('dialog')].some(dialog=>dialog.open);
 function enterMapMode(){if(!state.tiltMapEnabled||state.viewMode==='map')return;state.viewMode='map';void mapMode.show();debugInfo()}
 function exitMapMode(){if(state.viewMode==='ar')return;state.viewMode='ar';mapMode.hide();scheduleProjection();debugInfo()}

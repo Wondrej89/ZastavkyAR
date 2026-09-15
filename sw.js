@@ -87,7 +87,7 @@ self.addEventListener('fetch', event => {
 
   const url = new URL(event.request.url);
 
-  // Mapy.com TileJSON and raster tiles always use the network and are never cached.
+  // Mapy.com raster tiles always use the network and are never cached.
   if (url.hostname === 'api.mapy.com') return;
 
   if (

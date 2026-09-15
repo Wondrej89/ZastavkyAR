@@ -14,16 +14,45 @@ export const mapStopClickHandler = (stop, select) => event => {
   select(stop);
 };
 
+export function mapyRasterStyle(apiKey) {
+  return {
+    version: 8,
+    sources: {
+      mapy: {
+        type: 'raster',
+        tileSize: 256,
+        tiles: [
+          `https://api.mapy.com/v1/maptiles/basic/256/{z}/{x}/{y}?apikey=${encodeURIComponent(apiKey)}`
+        ],
+        attribution: '© <a href="https://mapy.com/" target="_blank">Seznam.cz, a.s.</a>'
+      }
+    },
+    layers: [{ id: 'mapy', type: 'raster', source: 'mapy' }]
+  };
+}
+
+export function mapErrorDetails(value) {
+  const error = value?.error || value;
+  const parts = [error?.message || String(error || 'Neznámá chyba')];
+  const sourceId = value?.sourceId || error?.sourceId;
+  const status = error?.status || error?.statusCode;
+  const url = error?.url || error?.request?.url;
+  if (sourceId) parts.push(`zdroj: ${sourceId}`);
+  if (status) parts.push(`HTTP: ${status}`);
+  if (url) parts.push(`URL: ${url}`);
+  return parts.join('\n');
+}
+
 export class MapMode {
-  constructor({ root, container, error, compass, config, state, select, loadLibrary = loadMapLibre }) {
-    Object.assign(this, { root, container, error, compass, config, state, select, loadLibrary });
+  constructor({ root, container, error, compass, config, state, select, debug = false, loadLibrary = loadMapLibre }) {
+    Object.assign(this, { root, container, error, compass, config, state, select, debug, loadLibrary });
     this.map = null; this.markers = []; this.lastMarkerPosition = null; this.initializing = null;
     compass.onclick = () => { state.mapRotationMode = state.mapRotationMode === 'heading-up' ? 'north-up' : 'heading-up'; localStorage.setItem('pid-ar-map-rotation-mode', state.mapRotationMode); this.updateOrientation(); };
   }
   async show() {
     this.root.classList.remove('hidden');
     try { await this.ensureMap(); this.map.resize(); this.updatePosition(true); }
-    catch (_) { this.error.classList.remove('hidden'); }
+    catch (error) { this.showError(error); }
   }
   hide() { this.root.classList.add('hidden'); }
   async ensureMap() {
@@ -35,15 +64,20 @@ export class MapMode {
       this.map = new maplibregl.Map({
         container: this.container, center: [this.state.rawPosition?.longitude || 14.42, this.state.rawPosition?.latitude || 50.08], zoom: this.config.mapZoom,
         minZoom: this.config.mapMinZoom, maxZoom: this.config.mapMaxZoom, dragPan: false, dragRotate: false, touchPitch: false,
-        style: { version: 8, sources: { mapy: { type: 'raster', tileSize: 256,
-          url: `https://api.mapy.com/v1/maptiles/basic/256/tilejson?apikey=${encodeURIComponent(this.config.mapyApiKey)}` } }, layers: [{ id: 'mapy', type: 'raster', source: 'mapy' }] },
+        style: mapyRasterStyle(this.config.mapyApiKey),
         attributionControl: true
       });
-      this.map.on('error', () => this.error.classList.remove('hidden'));
+      this.map.on('error', event => this.showError(event));
       this.map.on('load', () => { this.error.classList.add('hidden'); this.updatePosition(true); });
       return this.map;
     }).finally(() => { this.initializing = null; });
     return this.initializing;
+  }
+  showError(error) {
+    this.error.textContent = this.debug
+      ? `Mapu se nepodařilo načíst.\n${mapErrorDetails(error)}`
+      : 'Mapu se nepodařilo načíst.\nZkontrolujte připojení.';
+    this.error.classList.remove('hidden');
   }
   updatePosition(forceMarkers = false) {
     if (!this.map || !this.state.rawPosition) return;
@@ -69,7 +103,7 @@ export class MapMode {
       const el = document.createElement('button'); el.className = 'map-stop'; el.setAttribute('aria-label', stop.name);
       for (const mode of markerModes(stop)) { const img = document.createElement('img'); img.src = `icons/transit/${TRANSIT_ICONS[mode]}`; img.alt = ''; el.append(img); }
       el.onclick = mapStopClickHandler(stop, this.select);
-      this.markers.push(new this.lib.Marker({ element: el, rotationAlignment: 'viewport' }).setLngLat([stop.longitude, stop.latitude]).addTo(this.map));
+      this.markers.push(new this.lib.Marker({ element: el, rotationAlignment: 'viewport' }).setLngLat([stop.lon, stop.lat]).addTo(this.map));
     }
     this.lastMarkerPosition = { ...this.state.rawPosition };
   }

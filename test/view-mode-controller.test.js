@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { cameraDownAngle, ViewModeController } from '../js/view-mode-controller.js';
-import { mapOrientation, mapStopClickHandler, MapMode } from '../js/map-mode.js';
+import { mapOrientation, mapStopClickHandler, mapyRasterStyle, mapErrorDetails, MapMode } from '../js/map-mode.js';
 
 const config={mapEnterAngleDeg:35,mapExitAngleDeg:55,mapEnterDwellMs:300,mapExitDwellMs:250};
 function fixture(){let time=0,mode='ar',enabled=true,paused=false;const controller=new ViewModeController({config,now:()=>time,getMode:()=>mode,isEnabled:()=>enabled,isPaused:()=>paused,enterMap:()=>mode='map',exitMap:()=>mode='ar'});return{controller,get mode(){return mode},set mode(v){mode=v},set time(v){time=v},set enabled(v){enabled=v},set paused(v){paused=v}}}
@@ -16,3 +16,5 @@ test('map orientation follows rotation mode and compass availability',()=>{asser
 test('raw GPS update recenters an initialized map',()=>{const center=[];const state={rawPosition:{latitude:50,longitude:14},heading:null,mapRotationMode:'heading-up'};const root={style:{setProperty(){}},classList:{toggle(){}}},compass={dataset:{},setAttribute(){}};const mode=new MapMode({root,container:{},error:{},compass,config:{mapMarkerRefreshMeters:18},state,select(){}});mode.map={easeTo:v=>center.push(v.center),setBearing(){}};mode.lastMarkerPosition={...state.rawPosition};mode.updatePosition();state.rawPosition={latitude:50.1,longitude:14.1};mode.lastMarkerPosition={...state.rawPosition};mode.updatePosition();assert.deepEqual(center.at(-1),[14.1,50.1])});
 
 test('map stop click delegates to existing departure board selection',()=>{const stop={id:'stop'};let selected=null,stopped=false;mapStopClickHandler(stop,value=>selected=value)({stopPropagation(){stopped=true}});assert.equal(selected,stop);assert.equal(stopped,true)});
+test('Mapy raster style uses direct official tiles and attribution',()=>{const source=mapyRasterStyle('key with +').sources.mapy;assert.deepEqual(source.tiles,['https://api.mapy.com/v1/maptiles/basic/256/{z}/{x}/{y}?apikey=key%20with%20%2B']);assert.equal(source.url,undefined);assert.match(source.attribution,/Seznam\.cz/);assert.match(source.attribution,/mapy\.com/)});
+test('map error diagnostics include request details',()=>{assert.equal(mapErrorDetails({sourceId:'mapy',error:{message:'Tile failed',status:403,url:'https://tiles.invalid/1'}}),'Tile failed\nzdroj: mapy\nHTTP: 403\nURL: https://tiles.invalid/1')});
