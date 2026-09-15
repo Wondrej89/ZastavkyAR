@@ -1,6 +1,6 @@
 importScripts('./sw-version.js');
 const CACHE = `pid-ar-shell-${self.PID_AR_BUILD_VERSION}`;
-const SHELL = ['./','./index.html','./styles.css','./manifest.webmanifest','./icons/icon.svg','./icons/icon-192.svg','./icons/icon-512.svg','./js/app.js','./js/build-update.js','./js/build-version.js','./js/config.js','./js/dataset-status.js','./js/enhanced-ar.js','./js/geo.js','./js/service-area.js','./js/storage.js','./js/orientation.js','./js/permissions.js','./js/markers.js','./js/position-stabilizer.js','./js/location-tracking.js','./api/departures.js'];
+const SHELL = ['./','./index.html','./styles.css','./manifest.webmanifest','./icons/icon.svg','./icons/icon-192.svg','./icons/icon-512.svg','./js/app.js','./js/share.js','./js/qr-code.js','./js/build-update.js','./js/build-version.js','./js/config.js','./js/dataset-status.js','./js/enhanced-ar.js','./js/geo.js','./js/service-area.js','./js/storage.js','./js/orientation.js','./js/permissions.js','./js/markers.js','./js/position-stabilizer.js','./js/location-tracking.js','./api/departures.js'];
 self.addEventListener('install', event => event.waitUntil((async () => {
   const cache = await caches.open(CACHE);
   try {
