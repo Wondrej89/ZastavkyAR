@@ -14,6 +14,8 @@ const SHELL = [
   './js/app.js',
   './js/share.js',
   './js/qr-code.js',
+  './js/vendor/qrcode-generator.js',
+  './js/vendor/LICENSE.qrcode-generator',
   './js/build-update.js',
   './js/build-version.js',
   './js/config.js',
