@@ -59,6 +59,12 @@ export class MapMode {
     }).finally(() => { this.initializing = null; });
     return this.initializing;
   }
+  showError(error) {
+    this.error.textContent = this.debug
+      ? `Mapu se nepodařilo načíst.\n${mapErrorDetails(error)}`
+      : 'Mapu se nepodařilo načíst.\nZkontrolujte připojení.';
+    this.error.classList.remove('hidden');
+  }
   updatePosition(forceMarkers = false) {
     if (!this.map || !this.state.rawPosition) return;
     const p = this.state.rawPosition;
