@@ -1,0 +1,4 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {recordAcquisition,ACQUISITION_SOURCE_KEY,ACQUISITION_AT_KEY} from '../js/share.js';
+const storage=initial=>{const values=new Map(Object.entries(initial));return{getItem:key=>values.get(key)??null,setItem:(key,value)=>values.set(key,value),values}};
+test('records supported acquisition as first touch with timestamp',()=>{const store=storage({});recordAcquisition({search:'?utm_source=qr',storage:store,now:()=>new Date('2026-01-02T03:04:05Z')});assert.equal(store.getItem(ACQUISITION_SOURCE_KEY),'qr');assert.equal(store.getItem(ACQUISITION_AT_KEY),'2026-01-02T03:04:05.000Z')});
+test('does not overwrite first-touch acquisition',()=>{const store=storage({[ACQUISITION_SOURCE_KEY]:'qr',[ACQUISITION_AT_KEY]:'original'});recordAcquisition({search:'?utm_source=share',storage:store});assert.equal(store.getItem(ACQUISITION_SOURCE_KEY),'qr');assert.equal(store.getItem(ACQUISITION_AT_KEY),'original')});

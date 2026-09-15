@@ -1,5 +1,8 @@
 export const CONFIG = Object.freeze({
   apiBaseUrl: 'https://pid-ar-api.wondrej-blogspot.workers.dev',
+  shareBaseUrl: 'https://wondrej89.github.io/ZastavkyAR/',
+  shareLandingUrl: 'https://wondrej89.github.io/ZastavkyAR/from/share/',
+  qrLandingUrl: 'https://wondrej89.github.io/ZastavkyAR/from/qr/',
   datasetUrl: './data/pid-stops.json',
   datasetMetaUrl: './data/pid-stops-meta.json',
   serviceAreaUrl: './data/pid-service-area.json',
