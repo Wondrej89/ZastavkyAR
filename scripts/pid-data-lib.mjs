@@ -1,22 +1,62 @@
 import { isNightRoute } from '../js/transit.js';
 
-export function buildMarkersWithStats({ stops, routes, trips, stopTimes }) {
+const SURFACE_ROUTE_TYPES = new Set([0, 3, 4, 7, 11]);
+
+export function activeServiceIdsForDate({ calendar = [], calendarDates = [], serviceDates }) {
+  const active = new Set();
+  const weekdays = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+  for (const date of new Set(serviceDates)) {
+    const activeForDate = new Set();
+    const compact = date.replaceAll('-', '');
+    const weekday = weekdays[new Date(`${date}T12:00:00Z`).getUTCDay()];
+    for (const entry of calendar) if (compact >= entry.start_date && compact <= entry.end_date && String(entry[weekday]) === '1') activeForDate.add(entry.service_id);
+    for (const exception of calendarDates) if (exception.date === compact) {
+      if (String(exception.exception_type) === '1') activeForDate.add(exception.service_id);
+      if (String(exception.exception_type) === '2') activeForDate.delete(exception.service_id);
+    }
+    for (const serviceId of activeForDate) active.add(serviceId);
+  }
+  return active;
+}
+
+export function serviceDatesForTimeZone(now = new Date(), timeZone = 'Europe/Prague') {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone, year:'numeric', month:'2-digit', day:'2-digit' }).formatToParts(now).map(part => [part.type, part.value]));
+  const current = `${parts.year}-${parts.month}-${parts.day}`, previous = new Date(`${current}T12:00:00Z`);
+  previous.setUTCDate(previous.getUTCDate() - 1);
+  return [current, previous.toISOString().slice(0, 10)];
+}
+
+export function buildMarkersWithStats({ stops, routes, trips, stopTimes, activeServiceIds }) {
   const routeById = new Map(routes.map(route => [route.route_id, route]));
   const tripById = new Map(trips.map(trip => [trip.trip_id, trip]));
   const usage = new Map();
   const passengerRailStops = new Set();
+  const activeRailStops = new Set();
+  const surfaceStopsWithActiveTrip = new Set();
+  const surfaceStopsWithActiveBoarding = new Set();
+  const stopsWithInactiveBoarding = new Set();
   const nightRoutes = new Set(routes.filter(isNightRoute).map(route => route.route_id));
 
   for (const time of stopTimes) {
     const trip = tripById.get(time.trip_id);
     const route = trip && routeById.get(trip.route_id);
     if (!route) continue;
-
-    if (!usage.has(time.stop_id)) usage.set(time.stop_id, new Map());
     const routeType = Number(route.route_type);
-    if (!usage.get(time.stop_id).has(routeType)) usage.get(time.stop_id).set(routeType, new Map());
-    const routeName = route.route_short_name || route.route_long_name || '';
-    usage.get(time.stop_id).get(routeType).set(routeName, usage.get(time.stop_id).get(routeType).get(routeName) || nightRoutes.has(route.route_id));
+    const pickupAllowed = String(time.pickup_type ?? '') !== '1';
+    if (activeServiceIds && !activeServiceIds.has(trip.service_id)) {
+      if (pickupAllowed) stopsWithInactiveBoarding.add(time.stop_id);
+      continue;
+    }
+    if (SURFACE_ROUTE_TYPES.has(routeType)) surfaceStopsWithActiveTrip.add(time.stop_id);
+    if (routeType === 2) activeRailStops.add(time.stop_id);
+
+    if (pickupAllowed) {
+      if (!usage.has(time.stop_id)) usage.set(time.stop_id, new Map());
+      if (!usage.get(time.stop_id).has(routeType)) usage.get(time.stop_id).set(routeType, new Map());
+      const routeName = route.route_short_name || route.route_long_name || '';
+      usage.get(time.stop_id).get(routeType).set(routeName, usage.get(time.stop_id).get(routeType).get(routeName) || nightRoutes.has(route.route_id));
+      if (SURFACE_ROUTE_TYPES.has(routeType)) surfaceStopsWithActiveBoarding.add(time.stop_id);
+    }
 
     // In GTFS an empty pickup/drop-off value means regular service. A railway
     // stop is therefore technical only when both values are explicitly 1 on
@@ -28,12 +68,14 @@ export function buildMarkersWithStats({ stops, routes, trips, stopTimes }) {
 
   const railwayStopIds = new Set(
     stops
-      .filter(stop => Number(stop.location_type || 0) === 0 && usage.get(stop.stop_id)?.has(2))
+      .filter(stop => Number(stop.location_type || 0) === 0 && activeRailStops.has(stop.stop_id))
       .map(stop => stop.stop_id),
   );
   const statistics = {
     railwayPassengerStops: [...railwayStopIds].filter(id => passengerRailStops.has(id)).length,
     railwayTechnicalStopsExcluded: [...railwayStopIds].filter(id => !passengerRailStops.has(id)).length,
+    surfaceStopsExcludedNoPickup: [...surfaceStopsWithActiveTrip].filter(id => !surfaceStopsWithActiveBoarding.has(id)).length,
+    stopsExcludedInactiveService: [...stopsWithInactiveBoarding].filter(id => !usage.has(id)).length,
     nightRoutesByMode: {},
   };
   for (const route of routes) if (nightRoutes.has(route.route_id)) {
@@ -70,7 +112,7 @@ export function buildMarkersWithStats({ stops, routes, trips, stopTimes }) {
       const nightLines = lineEntries.filter(item => item.isNight).map(item => item.line).filter(Boolean);
       const dayLines = lineEntries.filter(item => !item.isNight).map(item => item.line).filter(Boolean);
       const hasNightService = lineEntries.some(item => item.isNight), hasDayService = lineEntries.some(item => !item.isNight);
-      add(stop, { kind:'surface', modes, hasNightService, hasDayService, nightOnly:hasNightService && !hasDayService, nightLines:[...new Set(nightLines)], dayLines:[...new Set(dayLines)] });
+      if (modes.length) add(stop, { kind:'surface', modes, boardable:true, hasNightService, hasDayService, nightOnly:hasNightService && !hasDayService, nightLines:[...new Set(nightLines)], dayLines:[...new Set(dayLines)] });
     }
   }
 
