@@ -7,7 +7,9 @@ const SHELL = [
   './index.html',
   './styles.css',
   './manifest.webmanifest',
-  './icons/icon.png',
+  './icons/pid-ar-v2-192.png',
+  './icons/pid-ar-v2-512.png',
+  './icons/pid-ar-v2-maskable-512.png',
 
   './js/app.js',
   './js/share.js',
