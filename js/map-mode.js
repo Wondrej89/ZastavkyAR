@@ -30,17 +30,35 @@ export class MapMode {
   constructor({ root, container, error, compass, config, state, select, loadLibrary = loadMapLibre, onDiagnosticsChange = () => {}, geolocation = globalThis.navigator?.geolocation }) {
     Object.assign(this, { root, container, error, compass, config, state, select, loadLibrary, onDiagnosticsChange, geolocation });
     this.map = null; this.markers = []; this.lastMarkerPosition = null; this.initializing = null;
-    this.libraryLoaded = false; this.mapLoaded = false; this.lastError = null;
+    this.libraryLoaded = false; this.mapLoaded = false; this.prewarmed = false; this.lastError = null;
     this.geolocateControl = null; this.mapGeolocationActive = false; this.mapGeolocateEventCount = 0; this.lastMapGeolocateAt = null;
     this.mapGpsLastFixAt = null; this.mapGpsRefreshedAfterResume = false; this.mapGpsRefreshError = null;
     compass.onclick = () => { state.mapRotationMode = state.mapRotationMode === 'heading-up' ? 'north-up' : 'heading-up'; localStorage.setItem('pid-ar-map-rotation-mode', state.mapRotationMode); this.updateOrientation(); };
   }
   async show(initialPosition = this.state.rawPosition || this.state.position) {
-    this.root.classList.remove('hidden');
-    try { await this.ensureMap(initialPosition); this.map.resize(); if (this.state.viewMode !== 'ar') { this.updatePosition(initialPosition, this.mapLoaded); this.activateGeolocation(); } }
+    try { await this.prepare(initialPosition); this.setPresented(true); this.map.resize(); if (this.state.viewMode !== 'ar') { this.updatePosition(initialPosition, true); this.activateGeolocation(); } }
     catch (error) { this.lastError = { message: error?.message ?? String(error ?? ''), status: error?.status ?? null }; this.error.classList.remove('hidden'); this.onDiagnosticsChange(); }
   }
-  hide() { this.root.classList.add('hidden'); }
+  hide() { this.setPresented(false); }
+  setPresented(presented) {
+    this.root.classList.toggle('presented', presented);
+    if (presented) this.map?.resize?.();
+  }
+  async prepare(initialPosition = this.state.rawPosition || this.state.position) {
+    if (this.mapLoaded) { this.updatePosition(initialPosition, true); return this.map; }
+    this.root.classList.remove('hidden');
+    this.root.classList.add('prewarming');
+    try {
+      await this.ensureMap(initialPosition);
+      await this.loaded;
+      this.updatePosition(initialPosition, true);
+      this.prewarmed = true;
+      this.onDiagnosticsChange();
+      return this.map;
+    } finally {
+      this.root.classList.remove('prewarming');
+    }
+  }
   async ensureMap(initialPosition = this.state.rawPosition || this.state.position) {
     if (this.map) return this.map;
     if (this.initializing) return this.initializing;
@@ -57,6 +75,10 @@ export class MapMode {
         attributionControl: true
       });
       this.onDiagnosticsChange();
+      this.loaded = new Promise((resolve, reject) => {
+        this.map.on('load', () => resolve(this.map));
+        this.map.on('error', event => { if (!this.mapLoaded) reject(event?.error ?? new Error('Mapu se nepodařilo načíst')); });
+      });
       this.map.on('error', event => { this.lastError = { message: event?.error?.message ?? String(event?.error ?? ''), status: event?.error?.status ?? null }; if (!this.mapLoaded) this.error.classList.remove('hidden'); this.onDiagnosticsChange(); });
       this.map.on('load', () => { this.mapLoaded = true; this.error.classList.add('hidden'); if (this.state.viewMode !== 'ar') { this.updatePosition(initialPosition, true); this.activateGeolocation(); } this.onDiagnosticsChange(); });
       return this.map;
