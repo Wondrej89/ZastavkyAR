@@ -75,9 +75,9 @@ build version: ${CURRENT_BUILD_VERSION}
 view mode: ${state.viewMode}
 GPS provider: ${state.viewMode==='map'?'maplibre':'custom'}
 custom GPS watch active: ${yes(locationTracking?.watch!==null&&locationTracking?.watch!==undefined)}
-MapLibre geolocation active: ${yes(mapMode.mapGeolocationActive)}
-MapLibre geolocate event count: ${mapMode.mapGeolocateEventCount}
-last map geolocate age: ${age(mapMode.lastMapGeolocateAt)}
+map geolocation active: ${yes(mapMode.mapGeolocationActive)}
+geolocate event count: ${mapMode.mapGeolocateEventCount}
+last geolocate age: ${age(mapMode.lastMapGeolocateAt)}
 
 raw GPS lat/lon: ${point(state.rawPosition)}
 raw GPS accuracy: ${Number.isFinite(state.rawPosition?.accuracy)?`${state.rawPosition.accuracy.toFixed(1)} m`:'—'}
@@ -88,8 +88,10 @@ last map position age: ${age(state.lastMapPosition?.timestamp)}
 AR anchor: ${point(state.position)}
 AR anchor age: ${age(state.position?.timestamp)}
 AR anchor source: ${gps.anchorSource||'—'}
-MapLibre center lat/lon: ${point(centerFix)}
+map center lat/lon: ${point(centerFix)}
 GPS → map center distance: ${state.rawPosition&&centerFix?`${haversine(state.rawPosition,centerFix).toFixed(1)} m`:'—'}
+map zoom: ${Number.isFinite(mapMode.map?.getZoom?.())?mapMode.map.getZoom().toFixed(2):'—'}
+configured map zoom: ${CONFIG.mapZoom}
 map bearing: ${angle(mapMode.map?.getBearing?.())}
 map rotation mode: ${state.mapRotationMode}
 map marker count: ${mapMode.markerCount}
@@ -97,7 +99,7 @@ map library loaded: ${yes(mapMode.libraryLoaded)}
 map loaded: ${yes(mapMode.mapLoaded)}
 map error: ${mapMode.lastError?.message||'—'}
 
-=== ORIENTATION / XR ===
+=== AR / SENSORS ===
 beta: ${angle(state.orientation.beta)}
 gamma: ${angle(state.orientation.gamma)}
 heading: ${angle(state.heading)}

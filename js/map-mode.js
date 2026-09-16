@@ -49,7 +49,9 @@ export class MapMode {
       if (!this.config.mapyApiKey) throw new Error('Mapy.com API key is not configured');
       this.map = new maplibregl.Map({
         container: this.container, center: [initialPosition?.longitude ?? 14.42, initialPosition?.latitude ?? 50.08], zoom: this.config.mapZoom,
-        minZoom: this.config.mapMinZoom, maxZoom: this.config.mapMaxZoom, dragPan: false, dragRotate: false, touchPitch: false,
+        minZoom: this.config.mapZoom, maxZoom: this.config.mapZoom,
+        dragPan: false, dragRotate: false, touchZoomRotate: false, touchPitch: false, scrollZoom: false,
+        doubleClickZoom: false, boxZoom: false, keyboard: false,
         style: mapStyle(this.config.mapyApiKey),
         attributionControl: true
       });
@@ -74,7 +76,13 @@ export class MapMode {
   }
   createGeolocateControl() {
     if (this.geolocateControl || !this.map || !this.lib?.GeolocateControl) return this.geolocateControl;
-    const control = new this.lib.GeolocateControl({ positionOptions: { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }, trackUserLocation: true, showUserLocation: true, showAccuracyCircle: true });
+    const control = new this.lib.GeolocateControl({
+      positionOptions: { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 },
+      trackUserLocation: true,
+      showUserLocation: false,
+      showAccuracyCircle: false,
+      fitBoundsOptions: { maxZoom: this.config.mapZoom }
+    });
     control.on('geolocate', event => this.handleGeolocate(event));
     control.on('trackuserlocationstart', () => { this.mapGeolocationActive = true; this.onDiagnosticsChange(); });
     control.on('trackuserlocationend', () => { this.mapGeolocationActive = false; this.onDiagnosticsChange(); });
@@ -101,6 +109,7 @@ export class MapMode {
     if (![fix.latitude, fix.longitude, fix.accuracy].every(Number.isFinite)) return false;
     this.state.rawPosition = fix; this.state.lastMapPosition = fix;
     this.mapGeolocateEventCount++; this.lastMapGeolocateAt = Date.now(); this.mapGeolocationActive = true;
+    if (typeof this.map?.getZoom === 'function' && Math.abs(this.map.getZoom() - this.config.mapZoom) > 1e-7) this.map.setZoom?.(this.config.mapZoom);
     if (!this.lastMarkerPosition || haversine(fix, this.lastMarkerPosition) >= this.config.mapMarkerRefreshMeters) this.updateStops();
     this.onDiagnosticsChange();
     return true;
