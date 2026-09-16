@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { MAX_TRANSITION_MS, ViewTransition } from '../js/view-transition.js';
+import { MAX_TRANSITION_MS, REDUCED_TRANSITION_MS, ViewTransition } from '../js/view-transition.js';
 
 class Classes {
   constructor(...values) { this.values = new Set(values); }
@@ -10,47 +10,56 @@ class Classes {
 }
 
 function fixture({ mode = 'ar', reduced = false, modalOpen = false } = {}) {
+  let time = 1000;
   const state = { viewMode: mode, viewTransition: { active: false, direction: null }, viewTransitionLockedUntil: 0 };
   const root = { classList: new Classes(`is-${mode}-mode`) };
-  const overlay = { classList: new Classes() };
+  const animations = [];
+  const overlay = { classList: new Classes(), animate: (frames, options) => { animations.push({ frames, options }); return { finished: new Promise(() => {}) }; } };
   const timers = [];
-  const transition = new ViewTransition({ root, overlay, state, config: { viewTransitionMs: 200, viewTransitionLockMs: 260 }, now: () => 1000,
-    setTimer: (callback, delay) => timers.push({ callback, delay }), reducedMotion: () => reduced, canStart: () => !modalOpen });
-  return { state, root, overlay, timers, transition };
+  const frames = [];
+  const transition = new ViewTransition({ root, overlay, state, config: { viewTransitionMs: 320, viewTransitionLockMs: 380 }, now: () => time,
+    setTimer: (callback, delay) => timers.push({ callback, delay }), requestFrame: callback => frames.push(callback), reducedMotion: () => reduced, canStart: () => !modalOpen });
+  const paint = () => { frames.shift()(); frames.shift()(); };
+  return { state, root, overlay, timers, frames, animations, transition, paint, setTime: value => { time = value; } };
 }
 
-test('AR to map starts transition state and ignores another transition', () => {
-  const f = fixture();
-  assert.equal(f.transition.start('to-map'), true);
-  assert.deepEqual(f.state.viewTransition, { active: true, direction: 'to-map' });
-  assert.equal(f.overlay.classList.contains('active'), true);
-  assert.equal(f.transition.start('to-ar'), false);
+const timerAt = (fixture, delay) => fixture.timers.find(timer => timer.delay === delay);
+
+test('animation starts after two frames and swaps presentation at 140 ms', () => {
+  const f = fixture(); let midpoint = 0;
+  assert.equal(f.transition.start('to-map', { onMidpoint: () => midpoint++ }), true);
+  assert.equal(f.animations.length, 0);
+  f.paint();
+  assert.equal(f.animations[0].options.duration, 320);
+  assert.deepEqual(f.animations[0].frames.map(frame => frame.transform), ['translateY(-12px)', 'translateY(0)', 'translateY(12px)']);
+  timerAt(f, 140).callback();
+  assert.equal(midpoint, 1);
+  assert.equal(f.state.viewTransitionMidpointReached, true);
   assert.equal(f.state.viewMode, 'ar');
 });
 
-test('completion only cleans up presentation and never commits functional mode', () => {
-  const f = fixture(); f.transition.start('to-map'); f.timers[0].callback();
-  assert.equal(f.state.viewMode, 'ar');
-  assert.equal(f.state.viewTransition.active, false);
+test('fail-safe performs midpoint, completion and cleanup without animation callbacks', () => {
+  const f = fixture(); let midpoint = 0, completion = 0;
+  f.transition.start('to-map', { onMidpoint: () => midpoint++, onComplete: () => completion++ });
+  assert.equal(timerAt(f, MAX_TRANSITION_MS).delay, 560);
+  f.setTime(1560); timerAt(f, MAX_TRANSITION_MS).callback();
+  assert.equal(midpoint, 1); assert.equal(completion, 1);
+  assert.deepEqual(f.state.viewTransition, { active: false, direction: null });
   assert.equal(f.overlay.classList.contains('active'), false);
+  assert.equal(f.state.viewTransitionCompleted, true);
 });
 
-test('map to AR transition never controls map visibility or functional mode', () => {
-  const f = fixture({ mode: 'map' }); f.transition.start('to-ar');
-  f.timers[0].callback();
+test('callbacks are presentation-only and never commit functional mode', () => {
+  const f = fixture({ mode: 'map' });
+  f.transition.start('to-ar'); f.paint(); timerAt(f, 140).callback();
   assert.equal(f.state.viewMode, 'map');
 });
 
-test('fail-safe timer cleans up a transition whose normal callback never runs', () => {
-  const f = fixture(); f.transition.start('to-map');
-  assert.equal(f.timers[1].delay, MAX_TRANSITION_MS);
-  f.timers[1].callback();
-  assert.deepEqual(f.state.viewTransition, { active: false, direction: null });
-});
-
-test('reduced motion uses the minimal transition variant', () => {
-  const f = fixture({ reduced: true }); f.transition.start('to-map');
-  assert.equal(f.timers[0].delay, 1);
+test('reduced motion uses 120 ms opacity-only animation', () => {
+  const f = fixture({ reduced: true }); f.transition.start('to-map'); f.paint();
+  assert.equal(f.animations[0].options.duration, REDUCED_TRANSITION_MS);
+  assert.deepEqual(f.animations[0].frames.map(frame => frame.transform), ['translateY(0)', 'translateY(0)', 'translateY(0)']);
+  assert.equal(f.state.viewTransitionReducedMotion, true);
   assert.equal(f.root.classList.contains('reduced-motion'), true);
 });
 
