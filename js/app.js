@@ -78,6 +78,9 @@ custom GPS watch active: ${yes(locationTracking?.watch!==null&&locationTracking?
 map geolocation active: ${yes(mapMode.mapGeolocationActive)}
 geolocate event count: ${mapMode.mapGeolocateEventCount}
 last geolocate age: ${age(mapMode.lastMapGeolocateAt)}
+map GPS last fix age: ${age(mapMode.mapGpsLastFixAt)}
+map GPS refreshed after resume: ${yes(mapMode.mapGpsRefreshedAfterResume)}
+map GPS refresh error: ${mapMode.mapGpsRefreshError||'—'}
 
 raw GPS lat/lon: ${point(state.rawPosition)}
 raw GPS accuracy: ${Number.isFinite(state.rawPosition?.accuracy)?`${state.rawPosition.accuracy.toFixed(1)} m`:'—'}
@@ -148,7 +151,7 @@ $('filter-open').onclick=()=>{$('filter').showModal()};document.querySelectorAll
 let registration; async function checkBuild(){if(registration)try{await checkForBuildUpdate({registration,currentVersion:CURRENT_BUILD_VERSION})}catch(_){/* offline */}}
 function restartCamera(){camera.start().then(stream=>{state.stream=stream}).catch(()=>status('Kameru nelze znovu spustit.',true))}
 const updateEnhancedARRecovery=setupEnhancedARRecovery({state:state.enhancedAR,panel:$('enhanced-ar-recovery'),button:$('enhanced-ar-restart'),beginEnhancedAR});
-document.addEventListener('visibilitychange',()=>{if(state.viewMode==='ar')locationTracking?.visibilityChanged(document.hidden);else if(!document.hidden)mapMode.activateGeolocation();if(document.hidden){if(state.enhancedAR.active){state.enhancedAR.interrupted=true;void state.enhancedAR.interrupt?.()}else{camera.stop();state.stream=null}debugInfo();return}if(!state.enhancedAR.active){if(permissions)permissions.handleVisibility();else restartCamera()}updateEnhancedARRecovery();if(state.selected)loadDepartures();checkBuild();setTimeout(()=>viewModeController.evaluate(),0);debugInfo()});
+document.addEventListener('visibilitychange',()=>{if(state.viewMode==='ar')locationTracking?.visibilityChanged(document.hidden);else if(!document.hidden)void mapMode.refreshGeolocation();if(document.hidden){if(state.enhancedAR.active){state.enhancedAR.interrupted=true;void state.enhancedAR.interrupt?.()}else{camera.stop();state.stream=null}debugInfo();return}if(!state.enhancedAR.active){if(permissions)permissions.handleVisibility();else restartCamera()}updateEnhancedARRecovery();if(state.selected)loadDepartures();checkBuild();setTimeout(()=>viewModeController.evaluate(),0);debugInfo()});
 window.addEventListener('pageshow',()=>{if(!document.hidden&&!state.enhancedAR.active&&!camera.hasStream()&&$('start').disabled)restartCamera()});
 if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js',{updateViaCache:'none'}).then(value=>{registration=value;checkBuild()});if(isMobile()){$('mobile').classList.remove('hidden');initData()}else $('desktop').classList.remove('hidden');
 detectEnhancedAR().then(available=>{state.enhancedAR.available=available;$('enhanced-ar-welcome').classList.toggle('hidden',!available);$('enhanced-ar-toggle').checked=state.enhancedAR.enabled;setupFilter();debugInfo()});

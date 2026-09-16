@@ -48,6 +48,30 @@ test('geolocate update restores configured zoom without changing GPS flow',()=>{
   assert.equal(mode.handleGeolocate({coords:{latitude:50,longitude:14,accuracy:5},timestamp:123}),true);assert.deepEqual(zooms,[16.5]);assert.equal(state.rawPosition,state.lastMapPosition);
 });
 
+test('map resume requests a fresh fix, recenters immediately and keeps tracking active',async()=>{
+  let success,options;const jumps=[];
+  const geolocation={getCurrentPosition(onSuccess,_onError,value){success=onSuccess;options=value}};
+  const state={viewMode:'map',rawPosition:{latitude:49,longitude:13},lastMapPosition:null,heading:null,mapRotationMode:'north-up'},root={style:{setProperty(){}},classList:{toggle(){}}},compass={dataset:{},setAttribute(){}};
+  const mode=new MapMode({root,container:{},error:{},compass,config:{mapMarkerRefreshMeters:18,mapZoom:16.5},state,select(){},geolocation});
+  mode.mapLoaded=true;mode.map={jumpTo:value=>jumps.push(value),getZoom:()=>16.5};mode.geolocateControl={trigger(){throw new Error('active tracking must not be restarted')}};mode.mapGeolocationActive=true;
+  let updates=0;mode.updateStops=()=>{updates++};
+  const refresh=mode.refreshGeolocation();
+  assert.deepEqual(options,{enableHighAccuracy:true,maximumAge:0,timeout:10000});
+  success({coords:{latitude:50,longitude:14,accuracy:4,speed:2},timestamp:123});
+  assert.equal(await refresh,true);assert.deepEqual(state.rawPosition,{latitude:50,longitude:14,accuracy:4,speed:2,timestamp:123});assert.equal(state.lastMapPosition,state.rawPosition);
+  assert.deepEqual(jumps,[{center:[14,50]}]);assert.equal(updates,1);assert.equal(mode.mapGpsRefreshedAfterResume,true);assert.equal(mode.mapGpsRefreshError,null);assert.ok(Number.isFinite(mode.mapGpsLastFixAt));assert.equal(mode.mapGeolocationActive,true);
+});
+
+test('failed map resume refresh preserves the last fix and continues regular tracking',async()=>{
+  let failure,triggered=0;const oldFix={latitude:50,longitude:14,accuracy:8,timestamp:100};
+  const geolocation={getCurrentPosition(_success,onError){failure=onError}};
+  const state={viewMode:'map',rawPosition:oldFix,lastMapPosition:oldFix,heading:null,mapRotationMode:'north-up'},root={style:{setProperty(){}},classList:{toggle(){}}},compass={dataset:{},setAttribute(){}};
+  const mode=new MapMode({root,container:{},error:{},compass,config:{mapMarkerRefreshMeters:18,mapZoom:16.5},state,select(){},geolocation});
+  mode.mapLoaded=true;mode.map={};mode.geolocateControl={trigger(){triggered++}};
+  const refresh=mode.refreshGeolocation();failure({message:'timeout'});
+  assert.equal(await refresh,false);assert.equal(state.rawPosition,oldFix);assert.equal(state.lastMapPosition,oldFix);assert.equal(triggered,1);assert.equal(mode.mapGpsRefreshedAfterResume,false);assert.equal(mode.mapGpsRefreshError,'timeout');
+});
+
 test('map stop click delegates to existing departure board selection',()=>{const stop={id:'stop'};let selected=null,stopped=false;mapStopClickHandler(stop,value=>selected=value)({stopPropagation(){stopped=true}});assert.equal(selected,stop);assert.equal(stopped,true)});
 
 test('MapLibre loader returns a library with Map and Marker', async () => {

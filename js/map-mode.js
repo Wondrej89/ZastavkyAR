@@ -27,11 +27,12 @@ export function stopLngLat(stop) {
 }
 
 export class MapMode {
-  constructor({ root, container, error, compass, config, state, select, loadLibrary = loadMapLibre, onDiagnosticsChange = () => {} }) {
-    Object.assign(this, { root, container, error, compass, config, state, select, loadLibrary, onDiagnosticsChange });
+  constructor({ root, container, error, compass, config, state, select, loadLibrary = loadMapLibre, onDiagnosticsChange = () => {}, geolocation = globalThis.navigator?.geolocation }) {
+    Object.assign(this, { root, container, error, compass, config, state, select, loadLibrary, onDiagnosticsChange, geolocation });
     this.map = null; this.markers = []; this.lastMarkerPosition = null; this.initializing = null;
     this.libraryLoaded = false; this.mapLoaded = false; this.lastError = null;
     this.geolocateControl = null; this.mapGeolocationActive = false; this.mapGeolocateEventCount = 0; this.lastMapGeolocateAt = null;
+    this.mapGpsLastFixAt = null; this.mapGpsRefreshedAfterResume = false; this.mapGpsRefreshError = null;
     compass.onclick = () => { state.mapRotationMode = state.mapRotationMode === 'heading-up' ? 'north-up' : 'heading-up'; localStorage.setItem('pid-ar-map-rotation-mode', state.mapRotationMode); this.updateOrientation(); };
   }
   async show(initialPosition = this.state.rawPosition || this.state.position) {
@@ -97,6 +98,31 @@ export class MapMode {
     this.onDiagnosticsChange();
     return true;
   }
+  refreshGeolocation() {
+    this.mapGpsRefreshedAfterResume = false; this.mapGpsRefreshError = null; this.onDiagnosticsChange();
+    return new Promise(resolve => {
+      const finish = value => { this.activateGeolocation(); this.onDiagnosticsChange(); resolve(value); };
+      if (!this.geolocation?.getCurrentPosition) {
+        this.mapGpsRefreshError = 'Geolocation API není dostupné'; finish(false); return;
+      }
+      this.geolocation.getCurrentPosition(position => {
+        const coords = position?.coords;
+        const fix = { latitude: coords?.latitude, longitude: coords?.longitude, accuracy: coords?.accuracy, speed: coords?.speed ?? null, timestamp: position?.timestamp ?? Date.now() };
+        if (this.state.viewMode !== 'map') { finish(false); return; }
+        if (![fix.latitude, fix.longitude, fix.accuracy].every(Number.isFinite)) {
+          this.mapGpsRefreshError = 'GPS vrátila neplatnou polohu'; finish(false); return;
+        }
+        this.state.rawPosition = fix; this.state.lastMapPosition = fix;
+        this.mapGpsLastFixAt = Date.now(); this.mapGpsRefreshedAfterResume = true;
+        this.map?.jumpTo?.({ center: [fix.longitude, fix.latitude] });
+        if (!this.lastMarkerPosition || haversine(fix, this.lastMarkerPosition) >= this.config.mapMarkerRefreshMeters) this.updateStops();
+        finish(true);
+      }, error => {
+        this.mapGpsRefreshError = error?.message ?? String(error ?? 'Neznámá chyba GPS');
+        finish(false);
+      }, { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 });
+    });
+  }
   deactivateGeolocation() {
     const control = this.geolocateControl; this.mapGeolocationActive = false;
     if (control && this.map) this.map.removeControl(control);
@@ -108,7 +134,7 @@ export class MapMode {
     const fix = { latitude: coords?.latitude, longitude: coords?.longitude, accuracy: coords?.accuracy, speed: coords?.speed ?? null, timestamp: event?.timestamp ?? Date.now() };
     if (![fix.latitude, fix.longitude, fix.accuracy].every(Number.isFinite)) return false;
     this.state.rawPosition = fix; this.state.lastMapPosition = fix;
-    this.mapGeolocateEventCount++; this.lastMapGeolocateAt = Date.now(); this.mapGeolocationActive = true;
+    this.mapGeolocateEventCount++; this.lastMapGeolocateAt = Date.now(); this.mapGpsLastFixAt = this.lastMapGeolocateAt; this.mapGeolocationActive = true;
     if (typeof this.map?.getZoom === 'function' && Math.abs(this.map.getZoom() - this.config.mapZoom) > 1e-7) this.map.setZoom?.(this.config.mapZoom);
     if (!this.lastMarkerPosition || haversine(fix, this.lastMarkerPosition) >= this.config.mapMarkerRefreshMeters) this.updateStops();
     this.onDiagnosticsChange();
