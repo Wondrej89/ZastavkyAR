@@ -36,7 +36,30 @@ function enterMapMode(){
 function exitMapMode(){
  if(state.viewMode==='ar'||modalOpen())return false;state.viewMode='ar';mapMode.deactivateGeolocation();mapMode.hide();const tracking=ensureLocationTracking();locationStabilizer??=new PositionStabilizer(CONFIG,setPosition,()=>Date.now(),onHardReanchor);if(validFreshFix(state.lastMapPosition)){locationStabilizer.seedFromFix(state.lastMapPosition,'map-to-ar')}else{mapToArPending=true;tracking.requestFreshPosition().then(fix=>{if(!validFreshFix(fix))throw new Error('GPS vrátila neplatnou nebo zastaralou polohu');state.rawPosition=fix;mapToArPending=false;locationStabilizer.seedFromFix(fix,'map-to-ar');debugInfo()}).catch(error=>{mapToArPending=false;locationError(error)})}tracking.restartLocationTracking();scheduleProjection();playViewTransition('to-ar');debugInfo();return true
 }
-function playViewTransition(direction){const overlay=$('view-transition-overlay');overlay.getAnimations?.().forEach(animation=>animation.cancel());const fromY=direction==='to-map'?'-10px':'10px',toY=direction==='to-map'?'10px':'-10px';overlay.animate?.([{opacity:0,transform:`translateY(${fromY})`},{opacity:.72,transform:'translateY(0)',offset:.45},{opacity:0,transform:`translateY(${toY})`}],{duration:180,easing:'ease-out'});}
+function playViewTransition(direction){
+ const overlay=$('view-transition-overlay');
+ overlay.getAnimations?.({subtree:true}).forEach(animation=>animation.cancel());
+ const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)').matches;
+ if(reducedMotion){overlay.animate?.([{opacity:0},{opacity:.92,offset:.5},{opacity:0}],{duration:120,easing:'ease-out'});return}
+ const toMap=direction==='to-map',top=$('view-transition-overlay').querySelector('.transition-top'),bottom=overlay.querySelector('.transition-bottom'),horizon=overlay.querySelector('.transition-horizon');
+ const panelOptions={duration:240,easing:'cubic-bezier(.4,0,.2,1)'};
+ overlay.animate?.([
+  {opacity:0,transform:`translateY(${toMap?'-10px':'10px'}) scale(1)`},
+  {opacity:.98,transform:'translateY(0) scale(.985)',offset:.48},
+  {opacity:0,transform:`translateY(${toMap?'10px':'-10px'}) scale(1)`}
+ ],panelOptions);
+ top.animate?.([
+  {transform:'rotateX(0deg)'},
+  {transform:`rotateX(${toMap?'-22deg':'22deg'})`,offset:.48},
+  {transform:`rotateX(${toMap?'34deg':'-34deg'})`}
+ ],panelOptions);
+ bottom.animate?.([
+  {transform:'rotateX(0deg)'},
+  {transform:`rotateX(${toMap?'22deg':'-22deg'})`,offset:.48},
+  {transform:`rotateX(${toMap?'-34deg':'34deg'})`}
+ ],panelOptions);
+ horizon.animate?.([{opacity:0},{opacity:.75,offset:.48},{opacity:0}],panelOptions);
+}
 const viewModeController=new ViewModeController({config:CONFIG,getMode:()=>state.viewMode,isEnabled:()=>state.tiltMapEnabled,isPaused:()=>document.hidden||modalOpen(),enterMap:enterMapMode,exitMap:exitMapMode});
 function isMobile() { const ua = navigator.userAgentData?.mobile ?? /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent); const touch = matchMedia('(pointer:coarse)').matches || navigator.maxTouchPoints > 0; const noHover = matchMedia('(hover:none)').matches; return debug || ua || (touch && noHover && Math.min(innerWidth,innerHeight)<900); }
 function status(text, bad=false){ $('status').textContent=text; $('status').style.background=bad?'#7f1d1de8':''; }
