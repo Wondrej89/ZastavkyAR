@@ -19,16 +19,33 @@ test('map position is used only for explicit initial centering, not GPS camera f
 test('MapLibre geolocation owns map fixes, diagnostics, marker refresh and lifecycle',()=>{
   class GeolocateControl { constructor(options){this.options=options;this.listeners={};this.triggerCount=0} on(name,fn){this.listeners[name]=fn} trigger(){this.triggerCount++;this.listeners.trackuserlocationstart?.()} }
   const state={rawPosition:null,lastMapPosition:null,heading:null,mapRotationMode:'north-up'},root={style:{setProperty(){}},classList:{toggle(){}}},compass={dataset:{},setAttribute(){}},removed=[];
-  const mode=new MapMode({root,container:{},error:{},compass,config:{mapMarkerRefreshMeters:18},state,select(){}});
+  const mode=new MapMode({root,container:{},error:{},compass,config:{mapMarkerRefreshMeters:18,mapZoom:16.5},state,select(){}});
   mode.lib={GeolocateControl};mode.mapLoaded=true;mode.map={addControl(){},removeControl:c=>removed.push(c)};
   let stopUpdates=0;mode.updateStops=()=>{stopUpdates++;mode.lastMarkerPosition={...state.rawPosition}};
   assert.equal(mode.activateGeolocation(),true);assert.equal(mode.geolocateControl.triggerCount,1);assert.equal(mode.mapGeolocationActive,true);
   assert.deepEqual(mode.geolocateControl.options.positionOptions,{enableHighAccuracy:true,maximumAge:0,timeout:10000});
+  assert.equal(mode.geolocateControl.options.trackUserLocation,true);assert.equal(mode.geolocateControl.options.showUserLocation,false);assert.equal(mode.geolocateControl.options.showAccuracyCircle,false);assert.deepEqual(mode.geolocateControl.options.fitBoundsOptions,{maxZoom:16.5});
   const first={coords:{latitude:50,longitude:14,accuracy:5,speed:1},timestamp:100};mode.geolocateControl.listeners.geolocate(first);
   assert.deepEqual(state.rawPosition,{latitude:50,longitude:14,accuracy:5,speed:1,timestamp:100});assert.deepEqual(state.lastMapPosition,state.rawPosition);assert.equal(mode.mapGeolocateEventCount,1);assert.equal(stopUpdates,1);
   mode.geolocateControl.listeners.geolocate({coords:{latitude:50+1/111111,longitude:14,accuracy:5,speed:null},timestamp:101});assert.equal(stopUpdates,1);
   mode.geolocateControl.listeners.geolocate({coords:{latitude:50+20/111111,longitude:14,accuracy:5,speed:null},timestamp:102});assert.equal(stopUpdates,2);
   mode.deactivateGeolocation();assert.equal(mode.mapGeolocationActive,false);assert.equal(mode.geolocateControl,null);assert.equal(removed.length,1);
+});
+
+test('map uses fixed zoom and disables every manual camera interaction',async()=>{
+  let options;
+  class Map { constructor(value){options=value} on(){} }
+  const state={viewMode:'ar',rawPosition:null,heading:null,mapRotationMode:'north-up'},root={style:{setProperty(){}},classList:{toggle(){}}},compass={dataset:{},setAttribute(){}};
+  const mode=new MapMode({root,container:{},error:{},compass,config:{mapyApiKey:'key',mapZoom:16.5},state,select(){},loadLibrary:async()=>({Map})});
+  await mode.ensureMap();
+  assert.equal(options.zoom,16.5);assert.equal(options.minZoom,16.5);assert.equal(options.maxZoom,16.5);
+  for(const interaction of ['dragPan','dragRotate','touchZoomRotate','touchPitch','scrollZoom','doubleClickZoom','boxZoom','keyboard'])assert.equal(options[interaction],false,interaction);
+});
+
+test('geolocate update restores configured zoom without changing GPS flow',()=>{
+  const state={viewMode:'map',rawPosition:null,lastMapPosition:null,heading:null,mapRotationMode:'north-up'},root={style:{setProperty(){}},classList:{toggle(){}}},compass={dataset:{},setAttribute(){}},zooms=[];
+  const mode=new MapMode({root,container:{},error:{},compass,config:{mapMarkerRefreshMeters:18,mapZoom:16.5},state,select(){}});mode.updateStops=()=>{};mode.map={getZoom:()=>17,setZoom:value=>zooms.push(value)};
+  assert.equal(mode.handleGeolocate({coords:{latitude:50,longitude:14,accuracy:5},timestamp:123}),true);assert.deepEqual(zooms,[16.5]);assert.equal(state.rawPosition,state.lastMapPosition);
 });
 
 test('map stop click delegates to existing departure board selection',()=>{const stop={id:'stop'};let selected=null,stopped=false;mapStopClickHandler(stop,value=>selected=value)({stopPropagation(){stopped=true}});assert.equal(selected,stop);assert.equal(stopped,true)});
@@ -60,4 +77,10 @@ test('PID stop coordinates are converted from lon/lat and invalid stops are skip
 test('debug overlay has a touch-scrollable mobile viewport', async () => {
   const css = await readFile(new URL('../styles.css', import.meta.url), 'utf8');
   assert.match(css, /\.debug\{[^}]*max-height:calc\(100dvh[^}]*overflow-y:auto[^}]*overflow-x:auto[^}]*pointer-events:auto[^}]*-webkit-overflow-scrolling:touch/);
+});
+
+test('map view keeps the custom user marker and hides only MapLibre geolocation UI',async()=>{
+  const [html,css]=await Promise.all([readFile(new URL('../index.html',import.meta.url),'utf8'),readFile(new URL('../styles.css',import.meta.url),'utf8')]);
+  assert.match(html,/<div class="map-user" aria-label="Vaše poloha"><span class="map-user-arrow"><\/span><span class="map-user-dot"><\/span><\/div>/);
+  assert.match(css,/#map-view \.maplibregl-ctrl-geolocate\{display:none\}/);
 });
