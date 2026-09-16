@@ -31,15 +31,16 @@ export class MapMode {
     Object.assign(this, { root, container, error, compass, config, state, select, loadLibrary, onDiagnosticsChange });
     this.map = null; this.markers = []; this.lastMarkerPosition = null; this.initializing = null;
     this.libraryLoaded = false; this.mapLoaded = false; this.lastError = null;
+    this.geolocateControl = null; this.mapGeolocationActive = false; this.mapGeolocateEventCount = 0; this.lastMapGeolocateAt = null;
     compass.onclick = () => { state.mapRotationMode = state.mapRotationMode === 'heading-up' ? 'north-up' : 'heading-up'; localStorage.setItem('pid-ar-map-rotation-mode', state.mapRotationMode); this.updateOrientation(); };
   }
-  async show() {
+  async show(initialPosition = this.state.rawPosition || this.state.position) {
     this.root.classList.remove('hidden');
-    try { await this.ensureMap(); this.map.resize(); this.updatePosition(true); }
+    try { await this.ensureMap(initialPosition); this.map.resize(); if (this.state.viewMode !== 'ar') { this.updatePosition(initialPosition, this.mapLoaded); this.activateGeolocation(); } }
     catch (error) { this.lastError = { message: error?.message ?? String(error ?? ''), status: error?.status ?? null }; this.error.classList.remove('hidden'); this.onDiagnosticsChange(); }
   }
   hide() { this.root.classList.add('hidden'); }
-  async ensureMap() {
+  async ensureMap(initialPosition = this.state.rawPosition || this.state.position) {
     if (this.map) return this.map;
     if (this.initializing) return this.initializing;
     this.initializing = this.loadLibrary().then(maplibregl => {
@@ -47,14 +48,14 @@ export class MapMode {
       this.libraryLoaded = true; this.onDiagnosticsChange();
       if (!this.config.mapyApiKey) throw new Error('Mapy.com API key is not configured');
       this.map = new maplibregl.Map({
-        container: this.container, center: [this.state.rawPosition?.longitude || 14.42, this.state.rawPosition?.latitude || 50.08], zoom: this.config.mapZoom,
+        container: this.container, center: [initialPosition?.longitude ?? 14.42, initialPosition?.latitude ?? 50.08], zoom: this.config.mapZoom,
         minZoom: this.config.mapMinZoom, maxZoom: this.config.mapMaxZoom, dragPan: false, dragRotate: false, touchPitch: false,
         style: mapStyle(this.config.mapyApiKey),
         attributionControl: true
       });
       this.onDiagnosticsChange();
       this.map.on('error', event => { this.lastError = { message: event?.error?.message ?? String(event?.error ?? ''), status: event?.error?.status ?? null }; if (!this.mapLoaded) this.error.classList.remove('hidden'); this.onDiagnosticsChange(); });
-      this.map.on('load', () => { this.mapLoaded = true; this.error.classList.add('hidden'); this.updatePosition(true); this.onDiagnosticsChange(); });
+      this.map.on('load', () => { this.mapLoaded = true; this.error.classList.add('hidden'); if (this.state.viewMode !== 'ar') { this.updatePosition(initialPosition, true); this.activateGeolocation(); } this.onDiagnosticsChange(); });
       return this.map;
     }).finally(() => { this.initializing = null; });
     return this.initializing;
@@ -65,12 +66,44 @@ export class MapMode {
       : 'Mapu se nepodařilo načíst.\nZkontrolujte připojení.';
     this.error.classList.remove('hidden');
   }
-  updatePosition(forceMarkers = false) {
-    if (!this.map || !this.state.rawPosition) return;
-    const p = this.state.rawPosition;
-    this.map.easeTo({ center: [p.longitude, p.latitude], duration: 180, essential: true });
+  updatePosition(position = this.state.rawPosition, forceMarkers = false) {
+    if (!this.map || !position) return;
+    this.map.jumpTo?.({ center: [position.longitude, position.latitude] });
     this.updateOrientation();
-    if (forceMarkers || !this.lastMarkerPosition || haversine(p, this.lastMarkerPosition) >= this.config.mapMarkerRefreshMeters) this.updateStops();
+    if (forceMarkers) this.updateStops();
+  }
+  createGeolocateControl() {
+    if (this.geolocateControl || !this.map || !this.lib?.GeolocateControl) return this.geolocateControl;
+    const control = new this.lib.GeolocateControl({ positionOptions: { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }, trackUserLocation: true, showUserLocation: true, showAccuracyCircle: true });
+    control.on('geolocate', event => this.handleGeolocate(event));
+    control.on('trackuserlocationstart', () => { this.mapGeolocationActive = true; this.onDiagnosticsChange(); });
+    control.on('trackuserlocationend', () => { this.mapGeolocationActive = false; this.onDiagnosticsChange(); });
+    this.map.addControl(control); this.geolocateControl = control;
+    return control;
+  }
+  activateGeolocation() {
+    if (!this.mapLoaded || this.state.viewMode === 'ar') return false;
+    const control = this.createGeolocateControl();
+    if (!control || typeof control.trigger !== 'function') return false;
+    if (!this.mapGeolocationActive) control.trigger();
+    this.onDiagnosticsChange();
+    return true;
+  }
+  deactivateGeolocation() {
+    const control = this.geolocateControl; this.mapGeolocationActive = false;
+    if (control && this.map) this.map.removeControl(control);
+    this.geolocateControl = null; this.onDiagnosticsChange();
+  }
+  handleGeolocate(event) {
+    if (this.state.viewMode === 'ar') return false;
+    const coords = event?.coords;
+    const fix = { latitude: coords?.latitude, longitude: coords?.longitude, accuracy: coords?.accuracy, speed: coords?.speed ?? null, timestamp: event?.timestamp ?? Date.now() };
+    if (![fix.latitude, fix.longitude, fix.accuracy].every(Number.isFinite)) return false;
+    this.state.rawPosition = fix; this.state.lastMapPosition = fix;
+    this.mapGeolocateEventCount++; this.lastMapGeolocateAt = Date.now(); this.mapGeolocationActive = true;
+    if (!this.lastMarkerPosition || haversine(fix, this.lastMarkerPosition) >= this.config.mapMarkerRefreshMeters) this.updateStops();
+    this.onDiagnosticsChange();
+    return true;
   }
   updateOrientation() {
     if (!this.map) return;
