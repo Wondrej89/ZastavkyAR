@@ -11,11 +11,12 @@ import { PermissionController, PermissionPanelView } from './permissions.js';
 import { aimMarker, isSelectedNearby } from './marker-selection.js';
 import { LocationTracking } from './location-tracking.js';
 import { ViewModeController } from './view-mode-controller.js';
+import { ViewTransition } from './view-transition.js';
 import { MapMode, mapTileUrl } from './map-mode.js';
 import { recordAcquisition, setupShareUx, ACQUISITION_SOURCE_KEY, ACQUISITION_AT_KEY } from './share.js';
 const $ = id => document.getElementById(id), debug = new URLSearchParams(location.search).get('debug') === '1';
 const currentUtmSource=recordAcquisition();
-const savedModes=JSON.parse(localStorage.getItem('pid-ar-modes')||'null');const state = { dataset:null, grid:null, position:null, rawPosition:null, lastMapPosition:null, serviceArea:null, serviceAreaState:'unknown', heading:null, orientation:{}, orientationStartedAt:null, orientationError:null, enhancedAR:createEnhancedARState(), nearby:[], markerLayout:[], selected:null, aimed:null, lockedUntil:0, stream:null, poll:null, realtime:'idle', realtimeUrl:'—', realtimeStatus:'—',enabledModes:new Set(Array.isArray(savedModes)?savedModes:ALL_MODES),showNightStopsDuringDay:localStorage.getItem('pid-ar-night-stops-during-day')==='true',refreshingPosition:false,viewMode:'ar',tiltMapEnabled:localStorage.getItem('pid-ar-tilt-map-enabled')!=='false',mapRotationMode:localStorage.getItem('pid-ar-map-rotation-mode')||'heading-up' };
+const savedModes=JSON.parse(localStorage.getItem('pid-ar-modes')||'null');const state = { dataset:null, grid:null, position:null, rawPosition:null, lastMapPosition:null, serviceArea:null, serviceAreaState:'unknown', heading:null, orientation:{}, orientationStartedAt:null, orientationError:null, enhancedAR:createEnhancedARState(), nearby:[], markerLayout:[], selected:null, aimed:null, lockedUntil:0, stream:null, poll:null, realtime:'idle', realtimeUrl:'—', realtimeStatus:'—',enabledModes:new Set(Array.isArray(savedModes)?savedModes:ALL_MODES),showNightStopsDuringDay:localStorage.getItem('pid-ar-night-stops-during-day')==='true',refreshingPosition:false,viewMode:'ar',viewTransition:{active:false,direction:null},viewTransitionLockedUntil:0,lastViewTransitionDuration:null,tiltMapEnabled:localStorage.getItem('pid-ar-tilt-map-enabled')!=='false',mapRotationMode:localStorage.getItem('pid-ar-map-rotation-mode')||'heading-up' };
 state.enhancedAR.enabled=localStorage.getItem('pid-ar-enhanced')==='true';
 const camera=new CameraController($('camera'));
 let permissions,locationStabilizer,locationTracking,orientation,enhancedARAttempt=null,mapToArPending=false;
@@ -23,9 +24,15 @@ const mapMode=new MapMode({root:$('map-view'),container:$('map'),error:$('map-er
 const modalOpen=()=>!$('board').classList.contains('hidden')||!$('permission-panel').classList.contains('hidden')||[...document.querySelectorAll('dialog')].some(dialog=>dialog.open);
 function validFix(fix){return Number.isFinite(fix?.latitude)&&Number.isFinite(fix?.longitude)&&Number.isFinite(fix?.accuracy)}
 function validFreshFix(fix){return validFix(fix)&&Number.isFinite(fix.timestamp)&&Date.now()-fix.timestamp<=CONFIG.gpsFreshFixMaxAgeMs}
-function enterMapMode(){if(!state.tiltMapEnabled||state.viewMode==='map')return;state.viewMode='map';const initialPosition=validFix(state.rawPosition)?state.rawPosition:state.position;ensureLocationTracking().stop();void mapMode.show(initialPosition);debugInfo()}
-function exitMapMode(){if(state.viewMode==='ar')return;state.viewMode='ar';mapMode.deactivateGeolocation();mapMode.hide();const tracking=ensureLocationTracking();locationStabilizer??=new PositionStabilizer(CONFIG,setPosition,()=>Date.now(),onHardReanchor);if(validFreshFix(state.lastMapPosition)){locationStabilizer.seedFromFix(state.lastMapPosition,'map-to-ar')}else{mapToArPending=true;tracking.requestFreshPosition().then(fix=>{if(!validFreshFix(fix))throw new Error('GPS vrátila neplatnou nebo zastaralou polohu');state.rawPosition=fix;mapToArPending=false;locationStabilizer.seedFromFix(fix,'map-to-ar');debugInfo()}).catch(error=>{mapToArPending=false;locationError(error)})}tracking.restartLocationTracking();scheduleProjection();debugInfo()}
-const viewModeController=new ViewModeController({config:CONFIG,getMode:()=>state.viewMode,isEnabled:()=>state.tiltMapEnabled,isPaused:()=>document.hidden||modalOpen(),enterMap:enterMapMode,exitMap:exitMapMode});
+function enterMapMode(){if(!state.tiltMapEnabled||state.viewMode==='map'||modalOpen())return false;const initialPosition=validFix(state.rawPosition)?state.rawPosition:state.position;if(!viewTransition.start('to-map'))return false;ensureLocationTracking().stop();void mapMode.show(initialPosition);return true}
+function exitMapMode(){if(state.viewMode==='ar'||modalOpen())return false;if(!viewTransition.start('to-ar'))return false;return true}
+function completeViewTransition(mode){
+ if(mode==='map'){mapMode.map?.resize();mapMode.updatePosition(state.rawPosition,mapMode.mapLoaded);mapMode.activateGeolocation();}
+ else{mapMode.deactivateGeolocation();const tracking=ensureLocationTracking();locationStabilizer??=new PositionStabilizer(CONFIG,setPosition,()=>Date.now(),onHardReanchor);if(validFreshFix(state.lastMapPosition)){locationStabilizer.seedFromFix(state.lastMapPosition,'map-to-ar')}else{mapToArPending=true;tracking.requestFreshPosition().then(fix=>{if(!validFreshFix(fix))throw new Error('GPS vrátila neplatnou nebo zastaralou polohu');state.rawPosition=fix;mapToArPending=false;locationStabilizer.seedFromFix(fix,'map-to-ar');debugInfo()}).catch(error=>{mapToArPending=false;locationError(error)})}tracking.restartLocationTracking();scheduleProjection();}
+ debugInfo();
+}
+const viewTransition=new ViewTransition({root:$('mobile'),mapLayer:$('map-view'),state,config:CONFIG,canStart:()=>!modalOpen(),onComplete:completeViewTransition,onChange:()=>debugInfo()});
+const viewModeController=new ViewModeController({config:CONFIG,getMode:()=>state.viewMode,isEnabled:()=>state.tiltMapEnabled,isPaused:()=>document.hidden||modalOpen()||state.viewTransition.active||Date.now()<state.viewTransitionLockedUntil,enterMap:enterMapMode,exitMap:exitMapMode});
 function isMobile() { const ua = navigator.userAgentData?.mobile ?? /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent); const touch = matchMedia('(pointer:coarse)').matches || navigator.maxTouchPoints > 0; const noHover = matchMedia('(hover:none)').matches; return debug || ua || (touch && noHover && Math.min(innerWidth,innerHeight)<900); }
 function status(text, bad=false){ $('status').textContent=text; $('status').style.background=bad?'#7f1d1de8':''; }
 async function loadServiceArea(){try{const response=await fetch(CONFIG.serviceAreaUrl,{cache:'no-store'});if(!response.ok)throw new Error(`HTTP ${response.status}`);state.serviceArea=new ServiceAreaTracker(await response.json());if(state.position)updateNearby()}catch(_){/* Geofence must never prevent use of cached stop data. */}}
@@ -73,6 +80,10 @@ function debugInfo(diff){
  $('debug').textContent=`=== MAP / GPS ===
 build version: ${CURRENT_BUILD_VERSION}
 view mode: ${state.viewMode}
+view transition active: ${yes(state.viewTransition.active)}
+view transition direction: ${state.viewTransition.direction||'—'}
+transition locked until: ${state.viewTransitionLockedUntil||'—'}
+last transition duration: ${state.lastViewTransitionDuration===null?'—':`${state.lastViewTransitionDuration} ms`}
 GPS provider: ${state.viewMode==='map'?'maplibre':'custom'}
 custom GPS watch active: ${yes(locationTracking?.watch!==null&&locationTracking?.watch!==undefined)}
 map geolocation active: ${yes(mapMode.mapGeolocationActive)}
